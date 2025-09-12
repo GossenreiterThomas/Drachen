@@ -1,12 +1,16 @@
 # main.py
 import asyncio
 import random
+import wave
 
 import discord
 from discord.ext import commands
 import os
 from dotenv import load_dotenv
 import logging
+from piper import PiperVoice, SynthesisConfig
+
+from gtts import gTTS
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -57,10 +61,10 @@ async def info(interaction: discord.Interaction):
     embed.add_field(name="imagine", value="Bissl Vorstellungskraft", inline=True)
     embed.add_field(name="shoot", value="Irgendwer in deinem channel wird in einen gun 'incident' verwickelt.", inline=True)
     embed.add_field(name="music", value="Spiel zufällige ultra umschwärmte Stell Dir drachen Vor Hits.", inline=True)
+    embed.add_field(name="say", value="Thorsten sagt genau das, was du willst.", inline=True)
     embed.set_footer(text="Requested by " + interaction.user.name)
 
     await interaction.response.send_message(embed=embed)
-
 
 
 @bot.tree.command(name="imagine", description="stell dir einfach vor")
@@ -213,6 +217,61 @@ async def music(interaction: discord.Interaction):
     # 9. Disconnect
     if vc.is_connected():
         await msg.delete()
+        await vc.disconnect(force=True)
+
+
+@bot.tree.command(name="say", description="Convert text to speech")
+async def say(interaction: discord.Interaction, text: str):
+    if not text:
+        await interaction.response.send_message("You need to provide some text!", ephemeral=True)
+        return
+
+    if text.__len__() >= 2000:
+        await interaction.response.send_message("The text cannot be longer than 2000 characters!", ephemeral=True)
+        return
+
+    # 1. Defer the response to allow long processing
+    await interaction.response.defer(ephemeral=False)
+
+    # 2. Load voice model
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    model_path = os.path.join(BASE_DIR, "de_DE-thorsten-medium.onnx")
+    voice_model = PiperVoice.load(model_path)
+
+    # 3. Generate TTS
+    audio_path = os.path.join("tts", "tts_output.wav")
+    os.makedirs("tts", exist_ok=True)
+
+
+    # Open the output file for writing
+    with wave.open(audio_path, "wb") as wav_file:
+        # Set the required parameters
+        wav_file.setnchannels(1)  # Mono audio
+        wav_file.setsampwidth(2)  # 16-bit samples
+        wav_file.setframerate(22050)  # Sample rate (must match the model's expected rate)
+
+        voice_model.synthesize_wav(text, wav_file)
+
+    # 4. Send confirmation
+    msg = await interaction.followup.send(f"Generated speech for: `{text}`")
+
+    # 5. Join voice channel and play
+    if interaction.user.voice and interaction.user.voice.channel:
+        channel = interaction.user.voice.channel
+        try:
+            vc = await channel.connect()
+        except discord.ClientException:
+            vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
+
+        # Play audio
+        vc.play(discord.FFmpegPCMAudio(audio_path))
+
+        # Wait until finished
+        while vc.is_playing():
+            await asyncio.sleep(0.5)
+
+        await msg.delete()
+
         await vc.disconnect(force=True)
 
 
