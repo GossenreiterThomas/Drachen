@@ -46,15 +46,6 @@ DRAGON_GIFS = [
 ]
 MUSIC_DIR = "stelldirdrachenvor"
 
-@bot.tree.command(name="imagine", description="stell dir einfach vor")
-async def hello(interaction: discord.Interaction):
-    embed = discord.Embed(
-        title=f"{interaction.user.name}, du bist daran extreme Aufstellungskraft aufzubringen...!",
-        color=discord.Color.green()
-    )
-    embed.set_image(url=random.choice(DRAGON_GIFS))
-    await interaction.response.send_message(embed=embed)
-
 
 @bot.tree.command(name="help", description="Show some info")
 async def info(interaction: discord.Interaction):
@@ -65,8 +56,20 @@ async def info(interaction: discord.Interaction):
     )
     embed.add_field(name="imagine", value="Bissl Vorstellungskraft", inline=True)
     embed.add_field(name="shoot", value="Irgendwer in deinem channel wird in einen gun 'incident' verwickelt.", inline=True)
+    embed.add_field(name="music", value="Spiel zufällige ultra umschwärmte Stell Dir drachen Vor Hits.", inline=True)
     embed.set_footer(text="Requested by " + interaction.user.name)
 
+    await interaction.response.send_message(embed=embed)
+
+
+
+@bot.tree.command(name="imagine", description="stell dir einfach vor")
+async def hello(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title=f"{interaction.user.name}, du bist daran extreme Aufstellungskraft aufzubringen...!",
+        color=discord.Color.green()
+    )
+    embed.set_image(url=random.choice(DRAGON_GIFS))
     await interaction.response.send_message(embed=embed)
 
 
@@ -125,44 +128,92 @@ async def shoot(interaction: discord.Interaction):
     await vc.disconnect(force=True)
 
 
-@bot.tree.command(name="musik", description="Play the iconic stell dir drachen vor music")
-async def shoot(interaction: discord.Interaction):
+@bot.tree.command(name="music", description="Play a radio containing iconic stell dir drachen vor hits")
+async def music(interaction: discord.Interaction):
+    user = interaction.user
+
     # 1. Check if user is in a voice channel
-    if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.response.send_message("You need to be in a voice channel first!", ephemeral=True)
+    if not user.voice or not user.voice.channel:
+        await interaction.response.send_message(
+            "You need to be in a voice channel first!", ephemeral=True
+        )
         return
 
-    channel = interaction.user.voice.channel
+    channel = user.voice.channel
 
-    # 2. Connect to the channel
+    # 2. Connect or reuse
     try:
         vc = await channel.connect()
     except discord.ClientException:
-        # already connected
         vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
 
-    # 3. play music
-    files = [f for f in os.listdir(MUSIC_DIR) if f.endswith((".mp3", ".wav"))]
-    if not files:
-        await interaction.response.send_message("No sound files found!", ephemeral=True)
+    # 3. Send the initial message and get the Message object
+    await interaction.response.send_message("🔊 Starting playback...")
+    msg = await interaction.original_response()
+
+    # 4. Add reactions (pause, resume, stop, skip)
+    reactions = ["⏸️", "▶️", "⏹️", "⏭️"]
+    for r in reactions:
+        await msg.add_reaction(r)
+
+    # 5. Helper to pick a random file
+    def get_random_file():
+        files = [f for f in os.listdir(MUSIC_DIR) if f.endswith((".mp3", ".wav"))]
+        return os.path.join(MUSIC_DIR, random.choice(files)) if files else None
+
+    # 6. Helper to play a file
+    def play_file(path):
+        vc.play(discord.FFmpegPCMAudio(path))
+
+    # 7. Start the first song
+    sound_path = get_random_file()
+    if not sound_path:
+        await interaction.followup.send("No sound files found!", ephemeral=True)
         return
+    play_file(sound_path)
+    await msg.edit(content=f"🔊 Now playing: `{os.path.basename(sound_path)}`")
 
-    sound_path = os.path.join(MUSIC_DIR, random.choice(files))
+    # 8. Reaction loop
+    while True:
+        # Auto-play next song if finished
+        if not vc.is_playing() and not vc.is_paused():
+            sound_path = get_random_file()
+            if not sound_path:
+                break
+            play_file(sound_path)
+            await msg.edit(content=f"🔊 Now playing: `{os.path.basename(sound_path)}`")
 
-    # Notify user
-    if not interaction.response.is_done():
-        await interaction.response.send_message(f"🔊 Playing: `{os.path.basename(sound_path)}`")
-    else:
-        await interaction.followup.send(f"🔊 Playing: `{os.path.basename(sound_path)}`")
+        try:
+            reaction, reactor = await bot.wait_for(
+                "reaction_add",
+                timeout=300.0,
+                check=lambda r, u: r.message.id == msg.id and u != bot.user and str(r.emoji) in reactions,
+            )
+        except asyncio.TimeoutError:
+            break
 
+        emoji = str(reaction.emoji)
 
-    vc.play(discord.FFmpegPCMAudio(sound_path))
+        if emoji == "⏸️" and vc.is_playing():
+            vc.pause()
+        elif emoji == "▶️" and vc.is_paused():
+            vc.resume()
+        elif emoji == "⏹️":
+            vc.stop()
+            break
+        elif emoji == "⏭️":
+            vc.stop()
+            # next loop iteration automatically picks a new random song
 
-    # 4. Wait until audio finishes, then disconnect
-    while vc.is_playing():
-        await asyncio.sleep(1)
+        # Remove user reaction so it can be pressed again
+        await msg.remove_reaction(reaction.emoji, reactor)
 
-    await vc.disconnect(force=True)
+        await asyncio.sleep(0.5)
+
+    # 9. Disconnect
+    if vc.is_connected():
+        await msg.delete()
+        await vc.disconnect(force=True)
 
 
 if __name__ == "__main__":
