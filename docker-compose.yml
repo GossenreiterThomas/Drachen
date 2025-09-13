@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  discord-bot:
+    build: .
+    container_name: discord-bot
+    restart: unless-stopped
+
+    # Mount folders
+    volumes:
+      - ./music:/music:Z
+      - ./tts:/tts:Z
+      - ./.env:/.env:Z
+
+    # Pass env file
+    env_file:
+      - .env
