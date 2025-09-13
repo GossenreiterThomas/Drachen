@@ -2,6 +2,7 @@
 import asyncio
 import random
 import wave
+import traceback
 
 import discord
 from discord.ext import commands, tasks
@@ -391,7 +392,7 @@ async def say(interaction: discord.Interaction, text: str):
     await play_in_channel(interaction, audio_path)
 
 
-@tasks.loop(seconds=1)
+@tasks.loop(minutes=1)
 async def auto_voice_manager():
     for guild in bot.guilds:
         vc = discord.utils.get(bot.voice_clients, guild=guild)
@@ -459,6 +460,24 @@ async def on_ready():
         random_speaker.start()
 
 
+
+@bot.event
+async def on_disconnect():
+    print("⚠️ Bot disconnected from Discord!")
+
+@bot.event
+async def on_resumed():
+    print("✅ Bot reconnected to Discord!")
+
+
 if __name__ == "__main__":
     print("discord.py version:", discord.__version__)
     bot.run(DISCORD_TOKEN)
+
+while True:
+    try:
+        bot.run(DISCORD_TOKEN)
+    except Exception as e:
+        print("Bot crashed:", e)
+        traceback.print_exc()
+        asyncio.sleep(5)  # wait before reconnecting
