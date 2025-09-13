@@ -4,7 +4,7 @@ import random
 import wave
 
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import os
 from dotenv import load_dotenv
 import logging
@@ -30,10 +30,6 @@ class MyBot(commands.Bot):
         self.tree.copy_global_to(guild=guild)
         await self.tree.sync(guild=guild)
 
-        # Register globally (may take up to an hour to appear)
-        await self.tree.sync()
-        print("Synced global commands")
-
     async def on_ready(self):
         print(f"Logged in as {self.user} — connected to {len(self.guilds)} guild(s)")
         for g in self.guilds:
@@ -47,7 +43,129 @@ DRAGON_GIFS = [
     "https://media.tenor.com/fCu2RwI0fFYAAAAi/dragon.gif",
 ]
 MUSIC_DIR = "stelldirdrachenvor"
+greetings = [
+    "Hallo Leute!",
+    "Ich bins mal wieder, euer Drachen.",
+    "Ich bin Batman."
+]
+conversationTexts = [
+    "Stellt euch Drachen vor!",
+    "Ich bin ein Bot.",
+    "Gib mir Kekse!",
+    "Wie geht's?"
+]
+conversationEnds = [
+    "Ich muss jetzt hart kacken. Dafür müsst ihr mich jetzt einfach mal entschuldigen, sonst könnte das hier eine knappe Geschichte werden.",
+    "Ihr Arschlöcher!"
+]
+conversationCount = 0
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+model_path = os.path.join(BASE_DIR, "de_DE-thorsten-medium.onnx")
+voice_model = PiperVoice.load(model_path)
+
+async def generate_speech(text: str, filename: str = "tts_output.wav") -> str:
+    """
+    Generate TTS audio file from given text.
+    Returns the path to the generated audio.
+    """
+    audio_path = os.path.join("tts", filename)
+
+    with wave.open(audio_path, "wb") as wav_file:
+        wav_file.setnchannels(1)      # mono
+        wav_file.setsampwidth(2)      # 16-bit
+        wav_file.setframerate(22050)  # sample rate
+        voice_model.synthesize_wav(text, wav_file)
+
+    return audio_path
+
+async def play_in_channel(interaction: discord.Interaction, audio_path: str):
+    """
+    Plays an audio file in the user's current voice channel.
+    Disconnects after playback finishes.
+    """
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.followup.send("⚠️ You must be in a voice channel!", ephemeral=True)
+        return
+
+    channel = interaction.user.voice.channel
+    try:
+        vc = await channel.connect()
+    except discord.ClientException:
+        vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
+
+    play_audio(vc, audio_path)
+
+    while vc.is_playing():
+        await asyncio.sleep(0.5)
+
+    await leave_voice(vc)
+
+async def shoot_someone(
+    *,
+    interaction: discord.Interaction,
+    channel: discord.VoiceChannel,
+    vc: discord.VoiceClient,
+    sound_path: str = "gunshot.mp3",
+    delay: float = 0.8,
+    exclude_invoker: bool = True,
+) -> discord.Member | None:
+    """
+    Play the given sound in `vc`, then pick a random eligible member from `channel`
+    and disconnect them from voice. Replies are sent via the provided interaction.
+    Returns the Member that was disconnected, or None if no eligible member existed.
+    """
+
+    # Validate sound file exists
+    if not os.path.exists(sound_path):
+        # Use followup because the interaction should be responded to by caller
+        await interaction.followup.send("Gunshot sound file not found!", ephemeral=True)
+        return None
+
+    # Play the sound
+    play_audio(vc, sound_path)
+
+    # optional short delay to simulate timing (0.8s in your original)
+    if delay and delay > 0:
+        await asyncio.sleep(delay)
+
+    bot_member = interaction.guild.me
+    # Build eligible list: exclude the bot itself; optionally exclude the invoker
+    eligible = [
+        m for m in channel.members
+        if (not m.bot) and (m != bot_member)
+    ]
+
+    if not eligible:
+        await interaction.followup.send("Nobody else was in the channel... you got lucky 😏")
+        return None
+
+    target = random.choice(eligible)
+
+    try:
+        # disconnect target from voice (move to None)
+        await target.edit(voice_channel=None, reason=f"Shot by {interaction.user} via /shoot")
+        # announce publicly in channel (not ephemeral)
+        await interaction.followup.send(f"💥 **{target.display_name}** was brutally killed in a gun 'incident'")
+        return target
+    except discord.Forbidden:
+        await interaction.followup.send("I don’t have permission to move members!", ephemeral=True)
+        return None
+    except discord.HTTPException as e:
+        await interaction.followup.send(f"Failed to disconnect: {e}", ephemeral=True)
+        return None
+
+def play_audio(vc, audio_path):
+    if vc.is_playing() or vc.is_paused():
+        vc.stop()  # stop current playback immediately
+    vc.play(discord.FFmpegPCMAudio(audio_path))
+
+async def leave_voice(vc):
+    if vc.is_playing() or vc.is_paused():
+        vc.stop()
+    global conversationCount
+    conversationCount = 0
+    await vc.disconnect(force=True)
 
 @bot.tree.command(name="help", description="Show some info")
 async def info(interaction: discord.Interaction):
@@ -91,43 +209,76 @@ async def shoot(interaction: discord.Interaction):
         # already connected
         vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
 
-    # 3. Play gunshot sound
-    sound_path = "gunshot.mp3"
-    if not os.path.exists(sound_path):
-        await interaction.response.send_message("Gunshot sound file not found!", ephemeral=True)
-        return
-
     if not interaction.response.is_done():
-        await interaction.response.send_message("💥 Bang!", ephemeral=True)
-    else:
-        await interaction.followup.send("💥 Bang!", ephemeral=True)
+        await interaction.response.send_message("💥 Bang!", ephemeral=False)
 
-    vc.play(discord.FFmpegPCMAudio(sound_path))
-
-    # 4. kill someone
-    await asyncio.sleep(0.8)
-
-    bot_member = interaction.guild.me
-    eligible = [m for m in channel.members if m != bot_member]
-
-    if not eligible:
-        await interaction.followup.send("Nobody else was in the channel... you got lucky")
-
-    target = random.choice(eligible)
-
-    try:
-        await target.edit(voice_channel=None, reason=f"Brutally shot to death.")
-        await interaction.followup.send(f"💥 **{target.display_name}** was brutally killed in a gun 'incident'")
-    except discord.Forbidden:
-        await interaction.followup.send("I don’t have permission to move members!", ephemeral=True)
-    except discord.HTTPException as e:
-        await interaction.followup.send(f"Failed to disconnect: {e}", ephemeral=True)
+    # 3. shoot someone
+    await shoot_someone(
+        interaction=interaction,
+        channel=channel,
+        vc=vc,
+        sound_path="gunshot.mp3",
+        delay=0.8,
+        exclude_invoker=True,
+    )
 
     # 4. Wait until audio finishes, then disconnect
     while vc.is_playing():
         await asyncio.sleep(1)
 
-    await vc.disconnect(force=True)
+    await leave_voice(vc)
+
+
+@bot.tree.command(name="shootout", description="Shoot everyone in the channel, one by one")
+async def shootout(interaction: discord.Interaction):
+    # 1. Check if user is in a voice channel
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("You need to be in a voice channel first!", ephemeral=True)
+        return
+
+    channel = interaction.user.voice.channel
+
+    # 2. Connect to the channel
+    try:
+        vc = await channel.connect()
+    except discord.ClientException:
+        # already connected
+        vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
+
+    if not interaction.response.is_done():
+        await interaction.response.send_message("💥 Shootout starting...", ephemeral=False)
+
+    last_target = None
+
+    while True:
+        # Check if there are still humans to shoot
+        humans = [m for m in channel.members if not m.bot]
+        if not humans:
+            # No one left → report the last person shot
+            await interaction.followup.send(
+                f"Shootout finished. Last person shot was {last_target.display_name if last_target else 'nobody'}."
+            )
+            break
+
+        # Play standoff sound
+        play_audio(vc, "standoff.mp3")
+        await asyncio.sleep(random.randrange(5, 20))
+
+        # Shoot someone
+        last_target = await shoot_someone(
+            interaction=interaction,
+            channel=channel,
+            vc=vc,
+            sound_path="gunshot.mp3",
+            delay=0.8,
+            exclude_invoker=True,
+        )
+
+        # Wait until shooting audio finishes
+        while vc.is_playing():
+            await asyncio.sleep(1)
+
+    await leave_voice(vc)
 
 
 @bot.tree.command(name="music", description="Play a radio containing iconic stell dir drachen vor hits")
@@ -165,7 +316,7 @@ async def music(interaction: discord.Interaction):
 
     # 6. Helper to play a file
     def play_file(path):
-        vc.play(discord.FFmpegPCMAudio(path))
+        play_audio(vc, path)
 
     # 7. Start the first song
     sound_path = get_random_file()
@@ -215,62 +366,97 @@ async def music(interaction: discord.Interaction):
     # 9. Disconnect
     if vc.is_connected():
         await msg.delete()
-        await vc.disconnect(force=True)
+        await leave_voice(vc)
 
 
 @bot.tree.command(name="say", description="Convert text to speech")
 async def say(interaction: discord.Interaction, text: str):
     if not text:
-        await interaction.response.send_message("You need to provide some text!", ephemeral=True)
+        await interaction.response.send_message("❌ You must provide text!", ephemeral=True)
         return
 
-    if text.__len__() >= 2000:
-        await interaction.response.send_message("The text cannot be longer than 2000 characters!", ephemeral=True)
+    if len(text) >= 2000:
+        await interaction.response.send_message("⚠️ Text too long (max 2000 chars)!", ephemeral=True)
         return
 
-    # 1. Defer the response to allow long processing
-    await interaction.response.defer(ephemeral=False)
+    await interaction.response.defer()
 
-    # 2. Load voice model
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    model_path = os.path.join(BASE_DIR, "de_DE-thorsten-medium.onnx")
-    voice_model = PiperVoice.load(model_path)
+    # Generate speech
+    audio_path = await generate_speech(text)
 
-    # 3. Generate TTS
-    audio_path = os.path.join("tts", "tts_output.wav")
-    os.makedirs("tts", exist_ok=True)
+    # Send confirmation
+    await interaction.followup.send(f"🗣️ Generated speech for: `{text}`")
+
+    # Play in VC
+    await play_in_channel(interaction, audio_path)
 
 
-    # Open the output file for writing
-    with wave.open(audio_path, "wb") as wav_file:
-        # Set the required parameters
-        wav_file.setnchannels(1)  # Mono audio
-        wav_file.setsampwidth(2)  # 16-bit samples
-        wav_file.setframerate(22050)  # Sample rate (must match the model's expected rate)
+@tasks.loop(seconds=1)
+async def auto_voice_manager():
+    for guild in bot.guilds:
+        vc = discord.utils.get(bot.voice_clients, guild=guild)
 
-        voice_model.synthesize_wav(text, wav_file)
+        # Case 1: Already connected
+        if vc and vc.channel:
+            if len([m for m in vc.channel.members if not m.bot]) == 0:
+                # No humans left in channel
+                await leave_voice(vc)
+                print(f"❌ Disconnected from empty channel {vc.channel.name} in {guild.name}")
+            else:
+                # Still users there, stay
+                continue
 
-    # 4. Send confirmation
-    msg = await interaction.followup.send(f"Generated speech for: `{text}`")
+        if random.randrange(1, 10) == 1:
+            # Case 2: Not connected → try to find a channel with people
+            for channel in guild.voice_channels:
+                members = [m for m in channel.members if not m.bot]
+                if members:  # found humans
+                    try:
+                        await channel.connect()
+                        print(f"🔊 Joined {channel.name} in {guild.name}")
+                    except discord.ClientException:
+                        pass
+                    break  # only join one channel per guild
 
-    # 5. Join voice channel and play
-    if interaction.user.voice and interaction.user.voice.channel:
-        channel = interaction.user.voice.channel
-        try:
-            vc = await channel.connect()
-        except discord.ClientException:
-            vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
 
-        # Play audio
-        vc.play(discord.FFmpegPCMAudio(audio_path))
+@tasks.loop(seconds=5)
+async def random_speaker():
+    for guild in bot.guilds:
+        vc = discord.utils.get(bot.voice_clients, guild=guild)
 
-        # Wait until finished
-        while vc.is_playing():
-            await asyncio.sleep(0.5)
+        if vc and vc.is_connected() and not vc.is_playing():
+            # Only speak if there's at least 1 human in the channel
+            if any(not m.bot for m in vc.channel.members):
+                if random.choice([True, False]):
+                    global conversationCount
+                    if conversationCount == 0:
+                        text = random.choice(greetings)
+                    elif conversationCount == 4:
+                        text = random.choice(conversationEnds)
+                    else:
+                        text = random.choice(conversationTexts)
 
-        await msg.delete()
+                    audio_path = await generate_speech(text, "random_tts.wav")
+                    print(f"🗣️ Saying: {text}")
 
-        await vc.disconnect(force=True)
+                    # Play inside the connected VC
+                    play_audio(vc, audio_path)
+                    while vc.is_playing():
+                        await asyncio.sleep(0.5)
+
+                    if conversationCount == 4:
+                        await leave_voice(vc)
+                    else:
+                        conversationCount += 1
+
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+    if not auto_voice_manager.is_running():
+        auto_voice_manager.start()
+    if not random_speaker.is_running():
+        random_speaker.start()
 
 
 if __name__ == "__main__":
