@@ -2,7 +2,6 @@
 import asyncio
 import random
 import wave
-import traceback
 
 import discord
 from discord.ext import commands, tasks
@@ -450,25 +449,6 @@ async def random_speaker():
                     else:
                         conversationCount += 1
 
-
-@bot.event
-async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
-    if not auto_voice_manager.is_running():
-        auto_voice_manager.start()
-    if not random_speaker.is_running():
-        random_speaker.start()
-
-
-
-@bot.event
-async def on_disconnect():
-    print("⚠️ Bot disconnected from Discord!")
-
-@bot.event
-async def on_resumed():
-    print("✅ Bot reconnected to Discord!")
-
 @tasks.loop(minutes=5)
 async def keep_alive_ping():
     """
@@ -480,14 +460,28 @@ async def keep_alive_ping():
         print(f"💓 Keep-alive ping for guild: {guild.name} ({guild.id})")
 
 
+@bot.event
+async def on_disconnect():
+    print("⚠️ Bot disconnected from Discord!")
+
+@bot.event
+async def on_resumed():
+    print("✅ Bot reconnected to Discord!")
+
+
+
+@bot.event
+async def on_ready():
+    print(f"✅ Logged in as {bot.user}")
+    # start the loops
+    if not auto_voice_manager.is_running():
+        auto_voice_manager.start()
+    if not random_speaker.is_running():
+        random_speaker.start()
+    if not keep_alive_ping.is_running():
+        keep_alive_ping.start()
+
+
 if __name__ == "__main__":
     print("discord.py version:", discord.__version__)
     bot.run(DISCORD_TOKEN)
-
-while True:
-    try:
-        bot.run(DISCORD_TOKEN)
-    except Exception as e:
-        print("Bot crashed:", e)
-        traceback.print_exc()
-        asyncio.sleep(5)  # wait before reconnecting
