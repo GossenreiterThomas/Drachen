@@ -45,12 +45,13 @@ DRAGON_GIFS = [
 MUSIC_DIR = "stelldirdrachenvor"
 greetings = [
     "Hallo Leute!",
-    "Ich bins mal wieder, euer Drachen.",
+    "Ich bins mal 1wieder, euer Drachen.",
     "Ich bin Batman.",
     "Halli Hallo meine Gesellen.",
     "GuMo meine Besties.",
     "Hällo meine bitches.",
     "Hallo, wäre jemand daun für i sex?",
+    "{name}, wie gehts Frau und Kindern?"
 ]
 conversationTexts = [
     "Stellt euch Drachen vor!",
@@ -431,7 +432,7 @@ async def auto_voice_manager():
                 # Still users there, stay
                 continue
 
-        if random.randrange(1, 10) == 1:
+        if random.randrange(1, 1000) == 1:
             # Case 2: Not connected → try to find a channel with people
             for channel in guild.voice_channels:
                 members = [m for m in channel.members if not m.bot]
@@ -460,6 +461,10 @@ async def random_speaker():
                         text = random.choice(conversationEnds)
                     else:
                         text = random.choice(conversationTexts)
+
+                    humans = [m for m in vc.channel.members if not m.bot]
+                    if humans:
+                        text = text.replace("{name}", random.choice(humans).display_name)
 
                     audio_path = await generate_speech(text, "random_tts.wav")
                     print(f"🗣️ Saying: {text}")
