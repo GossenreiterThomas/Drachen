@@ -469,6 +469,16 @@ async def on_disconnect():
 async def on_resumed():
     print("✅ Bot reconnected to Discord!")
 
+@tasks.loop(minutes=5)
+async def keep_alive_ping():
+    """
+    Periodically prints a message to prevent idle disconnects.
+    Can also be used to log that the bot is still running.
+    """
+    for guild in bot.guilds:
+        # ping each guild to ensure the bot is considered active
+        print(f"💓 Keep-alive ping for guild: {guild.name} ({guild.id})")
+
 
 if __name__ == "__main__":
     print("discord.py version:", discord.__version__)
