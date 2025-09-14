@@ -46,17 +46,42 @@ MUSIC_DIR = "stelldirdrachenvor"
 greetings = [
     "Hallo Leute!",
     "Ich bins mal wieder, euer Drachen.",
-    "Ich bin Batman."
+    "Ich bin Batman.",
+    "Halli Hallo meine Gesellen.",
+    "GuMo meine Besties.",
+    "Hällo meine bitches.",
+    "Hallo, wäre jemand daun für i sex?",
 ]
 conversationTexts = [
     "Stellt euch Drachen vor!",
-    "Ich bin ein Bot.",
-    "Gib mir Kekse!",
-    "Wie geht's?"
+    "Bin ich ein großer Fan von.",
+    "Findet ihr auch das Winn ein Opfer ist?",
+    "Bin ich voll dafür.",
+    "Gute idee!",
+    "Mann, ich hasse Kinder.",
+    "Was ist eigendlich so eure Meinung zu Transgschender Drachen?",
+    "Se Bluetschufdeveize is connektet.",
+    "Ja.",
+    "Nein.",
+    "Gesundheit.",
+    "Leck ei.",
+    "Fresse.",
+    "Habt ihr schon mal über Würmer nachgedacht?",
+    "Kennt ihr eigendlich schon meine Lieblingsband: Knorkator?",
+    "Ich bin horny.",
+    "Manchmal denke ich, dass ich doch nicht die Schule abbrechen hätte sollen.",
+    "Mmmm?",
+    "Mmmm",
 ]
 conversationEnds = [
     "Ich muss jetzt hart kacken. Dafür müsst ihr mich jetzt einfach mal entschuldigen, sonst könnte das hier eine knappe Geschichte werden.",
-    "Ihr Arschlöcher!"
+    "Ihr Arschlöcher!",
+    "Es tut mir sehr leid, aber ich muss mich jetzt verziehen und mit meiner Frau über interdimensionale Quantenregeln reden.",
+    "Ich werde nun von dannen ziehn, einen schönen Tag noch.",
+    "Ich geh jetzt frustpissen, auf wiedersehen.",
+    "Ich werde jetzt meinen Drachen-Olaf scholtzen, also bis später.",
+    "Ach du scheiße, ich habe gerade Wasser über meinen Laptop geschüttet!",
+    "Scheiße! die Bullen kommen!",
 ]
 conversationCount = 0
 
