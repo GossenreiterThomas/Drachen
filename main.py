@@ -246,17 +246,6 @@ async def ask_ollama(
         print("Ollama request failed:", e)
         return f"[Ollama error: {e}]"
 
-class MySink(discord.AudioSink):
-    def __init__(self):
-        self.frames = {}
-
-    def write(self, data):
-        user_id = data.user.id
-        pcm = data.data  # raw PCM frames
-        if user_id not in self.frames:
-            self.frames[user_id] = []
-        self.frames[user_id].append(pcm)
-
 
 @bot.tree.command(name="help", description="Show some info")
 async def info(interaction: discord.Interaction):
