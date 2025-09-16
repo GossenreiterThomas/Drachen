@@ -142,49 +142,53 @@ async def shoot_someone(
     Returns the Member that was disconnected, or None if no eligible member existed.
     """
 
-    # Validate sound file exists
-    if not os.path.exists(sound_path):
-        # Use followup because the interaction should be responded to by caller
-        await interaction.followup.send("Gunshot sound file not found!", ephemeral=True)
-        return None
+    if vc.is_connected():
+        # Validate sound file exists
+        if not os.path.exists(sound_path):
+            # Use followup because the interaction should be responded to by caller
+            await interaction.followup.send("Gunshot sound file not found!", ephemeral=True)
+            return None
 
-    # Play the sound
-    play_audio(vc, sound_path)
+        # Play the sound
+        play_audio(vc, sound_path)
 
-    # optional short delay to simulate timing (0.8s in your original)
-    if delay and delay > 0:
-        await asyncio.sleep(delay)
+        # optional short delay to simulate timing (0.8s in your original)
+        if delay and delay > 0:
+            await asyncio.sleep(delay)
 
-    bot_member = interaction.guild.me
-    # Build eligible list: exclude the bot itself; optionally exclude the invoker
-    eligible = [
-        m for m in channel.members
-        if (not m.bot) and (m != bot_member)
-    ]
+        bot_member = interaction.guild.me
+        # Build eligible list: exclude the bot itself; optionally exclude the invoker
+        eligible = [
+            m for m in channel.members
+            if (not m.bot) and (m != bot_member)
+        ]
 
-    if not eligible:
-        await interaction.followup.send("Nobody else was in the channel... you got lucky 😏")
-        return None
+        if not eligible:
+            await interaction.followup.send("Nobody else was in the channel... you got lucky 😏")
+            return None
 
-    target = random.choice(eligible)
+        target = random.choice(eligible)
 
-    try:
-        # disconnect target from voice (move to None)
-        await target.edit(voice_channel=None, reason=f"Shot by {interaction.user} via /shoot")
-        # announce publicly in channel (not ephemeral)
-        await interaction.followup.send(f"💥 **{target.display_name}** was brutally killed in a gun 'incident'")
-        return target
-    except discord.Forbidden:
-        await interaction.followup.send("I don’t have permission to move members!", ephemeral=True)
-        return None
-    except discord.HTTPException as e:
-        await interaction.followup.send(f"Failed to disconnect: {e}", ephemeral=True)
+        try:
+            # disconnect target from voice (move to None)
+            await target.edit(voice_channel=None, reason=f"Shot by {interaction.user} via /shoot")
+            # announce publicly in channel (not ephemeral)
+            await interaction.followup.send(f"💥 **{target.display_name}** was brutally killed in a gun 'incident'")
+            return target
+        except discord.Forbidden:
+            await interaction.followup.send("I don’t have permission to move members!", ephemeral=True)
+            return None
+        except discord.HTTPException as e:
+            await interaction.followup.send(f"Failed to disconnect: {e}", ephemeral=True)
+            return None
+    else:
         return None
 
 def play_audio(vc, audio_path):
-    if vc.is_playing() or vc.is_paused():
-        vc.stop()  # stop current playback immediately
-    vc.play(discord.FFmpegPCMAudio(audio_path))
+    if vc.is_playing():
+        if vc.is_playing() or vc.is_paused():
+            vc.stop()  # stop current playback immediately
+        vc.play(discord.FFmpegPCMAudio(audio_path))
 
 async def leave_voice(vc):
     if vc.is_playing() or vc.is_paused():
