@@ -4,6 +4,7 @@ import random
 import wave
 
 import discord
+from discord import VoiceClient
 from discord.ext import commands, tasks
 import os
 from dotenv import load_dotenv
@@ -90,11 +91,15 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 model_path = os.path.join(BASE_DIR, "de_DE-thorsten-medium.onnx")
 voice_model = PiperVoice.load(model_path)
 
-async def generate_speech(text: str, filename: str = "tts_output.wav") -> str:
+async def generate_speech(text: str, vc, filename: str = "tts_output.wav") -> str:
     """
     Generate TTS audio file from given text.
     Returns the path to the generated audio.
     """
+    humans = [m for m in vc.channel.members if not m.bot]
+    if humans:
+        text = text.replace("{name}", random.choice(humans).display_name)
+
     audio_path = os.path.join("tts", filename)
 
     with wave.open(audio_path, "wb") as wav_file:
@@ -104,28 +109,6 @@ async def generate_speech(text: str, filename: str = "tts_output.wav") -> str:
         voice_model.synthesize_wav(text, wav_file)
 
     return audio_path
-
-async def play_in_channel(interaction: discord.Interaction, audio_path: str):
-    """
-    Plays an audio file in the user's current voice channel.
-    Disconnects after playback finishes.
-    """
-    if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.followup.send("⚠️ You must be in a voice channel!", ephemeral=True)
-        return
-
-    channel = interaction.user.voice.channel
-    try:
-        vc = await channel.connect()
-    except discord.ClientException:
-        vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
-
-    play_audio(vc, audio_path)
-
-    while vc.is_playing():
-        await asyncio.sleep(0.5)
-
-    await leave_voice(vc)
 
 async def shoot_someone(
     *,
@@ -412,16 +395,27 @@ async def say(interaction: discord.Interaction, text: str):
         await interaction.response.send_message("⚠️ Text too long (max 2000 chars)!", ephemeral=True)
         return
 
-    await interaction.response.defer()
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.followup.send("⚠️ You must be in a voice channel!", ephemeral=True)
+        return
 
-    # Generate speech
-    audio_path = await generate_speech(text)
+    channel = interaction.user.voice.channel
+    try:
+        vc = await channel.connect()
+    except discord.ClientException:
+        vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
+
+    audio_path = await generate_speech(text, vc)
+    play_audio(vc, audio_path)
+
+    while vc.is_playing():
+        await asyncio.sleep(0.5)
+
+    await leave_voice(vc)
 
     # Send confirmation
     await interaction.followup.send(f"🗣️ Generated speech for: `{text}`")
 
-    # Play in VC
-    await play_in_channel(interaction, audio_path)
 
 
 @tasks.loop(minutes=1)
@@ -469,11 +463,7 @@ async def random_speaker():
                     else:
                         text = random.choice(conversationTexts)
 
-                    humans = [m for m in vc.channel.members if not m.bot]
-                    if humans:
-                        text = text.replace("{name}", random.choice(humans).display_name)
-
-                    audio_path = await generate_speech(text, "random_tts.wav")
+                    audio_path = await generate_speech(text, vc, "random_tts.wav")
                     print(f"🗣️ Saying: {text}")
 
                     # Play inside the connected VC
