@@ -182,13 +182,16 @@ async def shoot_someone(
             await interaction.followup.send(f"Failed to disconnect: {e}", ephemeral=True)
             return None
     else:
+        print("Not connected to a voice channel.")
         return None
 
 def play_audio(vc, audio_path):
-    if vc.is_playing():
+    if vc.is_connected():
         if vc.is_playing() or vc.is_paused():
             vc.stop()  # stop current playback immediately
         vc.play(discord.FFmpegPCMAudio(audio_path))
+    else:
+        print("Not connected to a voice channel.")
 
 async def leave_voice(vc):
     if vc.is_playing() or vc.is_paused():
