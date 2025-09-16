@@ -1,5 +1,6 @@
 # main.py
 import asyncio
+import datetime
 import random
 import wave
 import string
@@ -198,6 +199,28 @@ async def leave_voice(vc):
     global conversationStarted
     conversationStarted = False
     await vc.disconnect(force=True)
+
+async def build_ai_context(vc: discord.VoiceClient) -> str:
+    """
+    Returns a string describing the voice channel, its members, and the guild.
+    Can be prepended to AI prompts to give it more awareness.
+    """
+    if not vc or not vc.channel:
+        return ""
+
+    channel = vc.channel
+    guild = channel.guild
+
+    humans = [m.display_name for m in channel.members if not m.bot]
+    human_list = ", ".join(humans) if humans else "no humans"
+
+    context = (
+        f"This is the voice channel '{channel.name}' in the guild '{guild.name}'. "
+        f"Members present: {human_list}. "
+        f"It is {datetime.time}. "
+        "Use this information to make the response more personal and context-aware."
+    )
+    return context
 
 async def ask_ollama(
     prompt: str,
@@ -482,13 +505,9 @@ async def say(interaction: discord.Interaction, text: str):
     await leave_voice(vc)
 
 
-@bot.tree.command(name="askai", description="Ask the local Ollama model something")
+@bot.tree.command(name="ask", description="Ask Thorsten something.")
 async def askai(interaction: discord.Interaction, prompt: str):
-    # Defer with ephemeral=True so all followups are also private
     await interaction.response.defer(ephemeral=True)
-
-    # Query Ollama
-    resp = await ask_ollama(prompt, model="thorsten")
 
     # Connect to user's voice channel
     if not interaction.user.voice or not interaction.user.voice.channel:
@@ -501,21 +520,26 @@ async def askai(interaction: discord.Interaction, prompt: str):
     except discord.ClientException:
         vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
 
-    # Process placeholders and generate speech
+    # Build context and prepend to prompt
+    context_str = await build_ai_context(vc)
+    full_prompt = f"{context_str}\n\nUser asked: {prompt}"
+
+    # Query Ollama
+    resp = await ask_ollama(full_prompt, model="thorsten")
+
+    # Replace placeholders and generate speech
     text = await replace_speech_placeholders(resp, vc)
     audio_path = await generate_speech(text)
 
     # Play audio
     play_audio(vc, audio_path)
-
-    # Tell the user (private)
     await interaction.followup.send("✅ Finished generating speech!", ephemeral=True)
 
-    # Wait for playback to finish
     while vc.is_playing():
         await asyncio.sleep(0.5)
 
     await leave_voice(vc)
+
 
 
 @tasks.loop(minutes=1)
