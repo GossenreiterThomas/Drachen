@@ -2,4 +2,4 @@ discord.py
 python-dotenv
 piper-tts
 pynacl
-traceback
+ollama
