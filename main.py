@@ -2,6 +2,8 @@
 import asyncio
 import random
 import wave
+import string
+import secrets
 
 import discord
 from discord import VoiceClient
@@ -10,10 +12,18 @@ import os
 from dotenv import load_dotenv
 import logging
 from piper import PiperVoice
+from ollama import AsyncClient
+from collections import deque
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 TEST_GUILD_ID = 1229147943668289546
+
+# ollama AI
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+ollama_client = AsyncClient(host=OLLAMA_HOST)
+ai_queue = deque()
+conversation_history: list[dict] = []
 
 # better to use default intents unless you need more
 intents = discord.Intents.all()
@@ -86,20 +96,17 @@ conversationEnds = [
     "Scheiße! die Bullen kommen!",
 ]
 conversationCount = 0
+conversationStarted = False
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 model_path = os.path.join(BASE_DIR, "de_DE-thorsten-medium.onnx")
 voice_model = PiperVoice.load(model_path)
 
-async def generate_speech(text: str, vc, filename: str = "tts_output.wav") -> str:
+async def generate_speech(text: str, filename: str = "tts_output.wav") -> str:
     """
     Generate TTS audio file from given text.
     Returns the path to the generated audio.
     """
-    humans = [m for m in vc.channel.members if not m.bot]
-    if humans:
-        text = text.replace("{name}", random.choice(humans).display_name)
-
     audio_path = os.path.join("tts", filename)
 
     with wave.open(audio_path, "wb") as wav_file:
@@ -109,6 +116,13 @@ async def generate_speech(text: str, vc, filename: str = "tts_output.wav") -> st
         voice_model.synthesize_wav(text, wav_file)
 
     return audio_path
+
+async def replace_speech_placeholders(text: str, vc) -> str:
+    humans = [m for m in vc.channel.members if not m.bot]
+    if humans:
+        text = text.replace("{name}", f"**{random.choice(humans).display_name}**")
+
+    return text
 
 async def shoot_someone(
     *,
@@ -181,7 +195,68 @@ async def leave_voice(vc):
         vc.stop()
     global conversationCount
     conversationCount = 0
+    global conversationStarted
+    conversationStarted = False
     await vc.disconnect(force=True)
+
+async def ask_ollama(
+    prompt: str,
+    model: str = "llama3:latest",
+    stream: bool = False,
+    max_history: int = 50
+) -> str:
+    """
+    Send `prompt` to Ollama and return the text response.
+    Uses AsyncClient from ollama-python. Non-blocking.
+    """
+    try:
+        # Append user message
+        conversation_history.append({"role": "user", "content": prompt})
+
+        # Streaming mode
+        if stream:
+            stream_iter = await ollama_client.chat(
+                model=model,
+                messages=conversation_history,
+                stream=True,
+            )
+            full_response = ""
+            async for chunk in stream_iter:
+                content = chunk["message"]["content"]
+                full_response += content
+
+        else:
+            resp = await ollama_client.chat(
+                model=model,
+                messages=conversation_history,
+                stream=False,
+            )
+            full_response = resp.get("message", {}).get("content", "")
+
+        # Append assistant response
+        conversation_history.append({"role": "assistant", "content": full_response})
+
+        # Keep only the last `max_history` messages
+        if len(conversation_history) > max_history:
+            conversation_history[:] = conversation_history[-max_history:]
+
+        return full_response
+
+    except Exception as e:
+        print("Ollama request failed:", e)
+        return f"[Ollama error: {e}]"
+
+class MySink(discord.AudioSink):
+    def __init__(self):
+        self.frames = {}
+
+    def write(self, data):
+        user_id = data.user.id
+        pcm = data.data  # raw PCM frames
+        if user_id not in self.frames:
+            self.frames[user_id] = []
+        self.frames[user_id].append(pcm)
+
 
 @bot.tree.command(name="help", description="Show some info")
 async def info(interaction: discord.Interaction):
@@ -405,76 +480,118 @@ async def say(interaction: discord.Interaction, text: str):
     except discord.ClientException:
         vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
 
-    audio_path = await generate_speech(text, vc)
+    text = await replace_speech_placeholders(text, vc)
+    audio_path = await generate_speech(text)
     play_audio(vc, audio_path)
+
+    # Send confirmation
+    await interaction.response.send_message(f"🗣️ Generated speech for: *{text}*")
 
     while vc.is_playing():
         await asyncio.sleep(0.5)
 
     await leave_voice(vc)
 
-    # Send confirmation
-    await interaction.followup.send(f"🗣️ Generated speech for: `{text}`")
 
+@bot.tree.command(name="askai", description="Ask the local Ollama model something")
+async def askai(interaction: discord.Interaction, prompt: str):
+    # Defer with ephemeral=True so all followups are also private
+    await interaction.response.defer(ephemeral=True)
+
+    # Query Ollama
+    resp = await ask_ollama(prompt, model="thorsten")
+
+    # Connect to user's voice channel
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.followup.send("⚠️ You must be in a voice channel!", ephemeral=True)
+        return
+
+    channel = interaction.user.voice.channel
+    try:
+        vc = await channel.connect()
+    except discord.ClientException:
+        vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
+
+    # Process placeholders and generate speech
+    text = await replace_speech_placeholders(resp, vc)
+    audio_path = await generate_speech(text)
+
+    # Play audio
+    play_audio(vc, audio_path)
+
+    # Tell the user (private)
+    await interaction.followup.send("✅ Finished generating speech!", ephemeral=True)
+
+    # Wait for playback to finish
+    while vc.is_playing():
+        await asyncio.sleep(0.5)
+
+    await leave_voice(vc)
 
 
 @tasks.loop(minutes=1)
 async def auto_voice_manager():
-    for guild in bot.guilds:
-        vc = discord.utils.get(bot.voice_clients, guild=guild)
+    global conversationStarted
+    if not conversationStarted:
+        for guild in bot.guilds:
+            vc = discord.utils.get(bot.voice_clients, guild=guild)
 
-        # Case 1: Already connected
-        if vc and vc.channel:
-            if len([m for m in vc.channel.members if not m.bot]) == 0:
-                # No humans left in channel
-                await leave_voice(vc)
-                print(f"❌ Disconnected from empty channel {vc.channel.name} in {guild.name}")
-            else:
-                # Still users there, stay
-                continue
+            # Case 1: Already connected
+            if vc and vc.channel:
+                if len([m for m in vc.channel.members if not m.bot]) == 0:
+                    # No humans left in channel
+                    await leave_voice(vc)
+                    print(f"❌ Disconnected from empty channel {vc.channel.name} in {guild.name}")
+                else:
+                    # Still users there, stay
+                    continue
 
-        if random.randrange(1, 1000) == 1:
-            # Case 2: Not connected → try to find a channel with people
-            for channel in guild.voice_channels:
-                members = [m for m in channel.members if not m.bot]
-                if members:  # found humans
-                    try:
-                        await channel.connect()
-                        print(f"🔊 Joined {channel.name} in {guild.name}")
-                    except discord.ClientException:
-                        pass
-                    break  # only join one channel per guild
+            if random.randrange(1, 1000) == 1:
+                # Case 2: Not connected → try to find a channel with people
+                for channel in guild.voice_channels:
+                    members = [m for m in channel.members if not m.bot]
+                    if members:  # found humans
+                        try:
+                            await channel.connect()
+                            conversationStarted = True
+                            print(f"🔊 Joined {channel.name} in {guild.name}")
+                        except discord.ClientException:
+                            pass
+                        break  # only join one channel per guild
 
 
 @tasks.loop(seconds=5)
 async def random_speaker():
-    for guild in bot.guilds:
-        vc = discord.utils.get(bot.voice_clients, guild=guild)
+    global conversationStarted
+    if conversationStarted:
+        for guild in bot.guilds:
+            vc = discord.utils.get(bot.voice_clients, guild=guild)
 
-        if vc and vc.is_connected() and not vc.is_playing():
-            # Only speak if there's at least 1 human in the channel
-            if any(not m.bot for m in vc.channel.members):
-                if random.choice([True, False]):
-                    global conversationCount
-                    if conversationCount == 0:
-                        text = random.choice(greetings)
-                    elif conversationCount == 4:
-                        text = random.choice(conversationEnds)
-                    else:
-                        text = random.choice(conversationTexts)
+            if vc and vc.is_connected() and not vc.is_playing():
+                # Only speak if there's at least 1 human in the channel
+                if any(not m.bot for m in vc.channel.members):
+                    if random.choice([True, False]):
+                        global conversationCount
+                        if conversationCount == 0:
+                            text = random.choice(greetings)
+                        elif conversationCount == 4:
+                            text = random.choice(conversationEnds)
+                        else:
+                            text = random.choice(conversationTexts)
 
-                    audio_path = await generate_speech(text, vc, "random_tts.wav")
-                    print(f"🗣️ Saying: {text}")
+                        text = await replace_speech_placeholders(text, vc)
+                        audio_path = await generate_speech(text, "random_tts.wav")
+                        print(f"🗣️ Saying: {text}")
 
-                    # Play inside the connected VC
-                    play_audio(vc, audio_path)
-                    while vc.is_playing():
-                        await asyncio.sleep(0.5)
+                        # Play inside the connected VC
+                        play_audio(vc, audio_path)
+                        while vc.is_playing():
+                            await asyncio.sleep(0.5)
 
-                    if conversationCount == 4:
-                        await leave_voice(vc)
-                    else:
-                        conversationCount += 1
+                        if conversationCount == 4:
+                            await leave_voice(vc)
+                        else:
+                            conversationCount += 1
 
 @tasks.loop(minutes=5)
 async def keep_alive_ping():
@@ -485,6 +602,29 @@ async def keep_alive_ping():
     for guild in bot.guilds:
         # ping each guild to ensure the bot is considered active
         print(f"💓 Keep-alive ping for guild: {guild.name} ({guild.id})")
+
+
+
+async def ai_worker():
+    while True:
+        if not ai_queue:
+            await asyncio.sleep(0.5)
+            continue
+        job = ai_queue.popleft()  # job is dict with {prompt, model, respond_channel, respond_user}
+        prompt = job["prompt"]
+        model = job.get("model", "ggml-mpt-7b")
+        result = await ask_ollama(prompt, model=model)
+        # deliver result: either send to a channel or DM the user
+        try:
+            if job.get("respond_channel"):
+                await job["respond_channel"].send(result)
+            elif job.get("respond_interaction"):
+                # if interaction was deferred earlier, use followup
+                await job["respond_interaction"].followup.send(result)
+            elif job.get("respond_user"):
+                await job["respond_user"].send(result)
+        except Exception as e:
+            print("Failed to send AI reply:", e)
 
 
 @bot.event
@@ -507,6 +647,9 @@ async def on_ready():
         random_speaker.start()
     if not keep_alive_ping.is_running():
         keep_alive_ping.start()
+    if not hasattr(bot, "_ai_worker_started"):
+        asyncio.create_task(ai_worker())
+        bot._ai_worker_started = True
 
 
 if __name__ == "__main__":
