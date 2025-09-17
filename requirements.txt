@@ -1,6 +1,5 @@
-discord.py
+py-cord
 python-dotenv
 piper-tts
 pynacl
-traceback
 ollama
