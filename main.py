@@ -217,6 +217,7 @@ async def build_ai_context(vc: discord.VoiceClient) -> str:
         f"This is the voice channel '{channel.name}' in the guild '{guild.name}'. "
         f"Members present: {human_list}. "
         f"It is {datetime.time}. "
+        "You can use {name} in your response, which selects a random person in the voice channel and replaces the placeholder with their name."
         "Use this information to make the response more personal and context-aware."
     )
     return context
