@@ -3,15 +3,12 @@ services:
     build: .
     container_name: discord-bot
     restart: always
-    networks:
-      - drache
-    # Mount folders
     volumes:
       - ./music:/music:Z
       - ./tts:/tts:Z
       - ./.env:/.env:Z
-
-    # Pass env file
+    networks:
+      - drache
     env_file:
       - .env
   ollama:

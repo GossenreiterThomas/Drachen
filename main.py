@@ -20,7 +20,8 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 TEST_GUILD_ID = 1229147943668289546
 
 # ollama AI
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+#OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
 ollama_client = AsyncClient(host=OLLAMA_HOST)
 ai_queue = deque()
 conversation_history: list[dict] = []
