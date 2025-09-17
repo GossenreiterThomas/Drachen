@@ -20,8 +20,7 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 TEST_GUILD_ID = 1229147943668289546
 
 # ollama AI
-#OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 ollama_client = AsyncClient(host=OLLAMA_HOST)
 ai_queue = deque()
 conversation_history: list[dict] = []
@@ -35,6 +34,12 @@ logging.basicConfig(level=logging.INFO)
 class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="!", intents=intents)
+
+    async def setup_hook(self):
+        # Register commands into ONE test guild for instant availability (dev)
+        guild = discord.Object(id=TEST_GUILD_ID)
+        self.tree.copy_global_to(guild=guild)
+        await self.tree.sync(guild=guild)
 
     async def on_ready(self):
         print(f"Logged in as {self.user} — connected to {len(self.guilds)} guild(s)")
@@ -121,7 +126,7 @@ async def replace_speech_placeholders(text: str, vc) -> str:
 
 async def shoot_someone(
     *,
-    interaction: discord.ApplicationContext,
+    interaction: discord.Interaction,
     channel: discord.VoiceChannel,
     vc: discord.VoiceClient,
     sound_path: str = "gunshot.mp3",
@@ -194,9 +199,6 @@ async def leave_voice(vc):
     conversationStarted = False
     await vc.disconnect(force=True)
 
-import datetime
-import discord
-
 async def build_ai_context(vc: discord.VoiceClient) -> str:
     """
     Returns a string describing the voice channel, its members, and the guild.
@@ -205,30 +207,19 @@ async def build_ai_context(vc: discord.VoiceClient) -> str:
     if not vc or not vc.channel:
         return ""
 
-    if not isinstance(vc.channel, (discord.VoiceChannel, discord.StageChannel)):
-        return ""
-
     channel = vc.channel
     guild = channel.guild
 
     humans = [m.display_name for m in channel.members if not m.bot]
-    if not humans:
-        human_list = "no humans"
-    elif len(humans) == 1:
-        human_list = humans[0]
-    else:
-        human_list = ", ".join(humans[:-1]) + f" and {humans[-1]}"
-
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    human_list = ", ".join(humans) if humans else "no humans"
 
     context = (
         f"This is the voice channel '{channel.name}' in the guild '{guild.name}'. "
         f"Members present: {human_list}. "
-        f"The current time is {now}. "
+        f"It is {datetime.time}. "
         "Use this information to make the response more personal and context-aware."
     )
     return context
-
 
 async def ask_ollama(
     prompt: str,
@@ -278,8 +269,8 @@ async def ask_ollama(
         return f"[Ollama error: {e}]"
 
 
-@bot.slash_command(name="help", description="Show some info")
-async def info(interaction: discord.ApplicationContext):
+@bot.tree.command(name="help", description="Show some info")
+async def info(interaction: discord.Interaction):
     embed = discord.Embed(
         title="STELL DIR DRACHEN VOR!!",
         description="Alle Befehle, die es so gibt und bissl Info.",
@@ -289,29 +280,29 @@ async def info(interaction: discord.ApplicationContext):
     embed.add_field(name="shoot", value="Irgendwer in deinem channel wird in einen gun 'incident' verwickelt.", inline=True)
     embed.add_field(name="music", value="Spiel zufällige ultra umschwärmte Stell Dir drachen Vor Hits.", inline=True)
     embed.add_field(name="say", value="Thorsten sagt genau das, was du willst.", inline=True)
-    embed.set_footer(text="Requested by " + interaction.author.nick)
+    embed.set_footer(text="Requested by " + interaction.user.name)
 
-    await interaction.respond(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed)
 
 
-@bot.slash_command(name="imagine", description="stell dir einfach vor")
-async def hello(interaction: discord.ApplicationContext):
+@bot.tree.command(name="imagine", description="stell dir einfach vor")
+async def hello(interaction: discord.Interaction):
     embed = discord.Embed(
-        title=f"{interaction.author.nick}, du bist daran extreme Vorstellungskraft aufzubringen...!",
+        title=f"{interaction.user.name}, du bist daran extreme Aufstellungskraft aufzubringen...!",
         color=discord.Color.green()
     )
     embed.set_image(url=random.choice(DRAGON_GIFS))
-    await interaction.respond(embed=embed)
+    await interaction.response.send_message(embed=embed)
 
 
-@bot.slash_command(name="shoot", description="Shoot someone")
-async def shoot(interaction: discord.ApplicationContext):
+@bot.tree.command(name="shoot", description="Shoot someone")
+async def shoot(interaction: discord.Interaction):
     # 1. Check if user is in a voice channel
-    if not interaction.author.voice or not interaction.author.voice.channel:
-        await interaction.respond("You need to be in a voice channel first!", ephemeral=True)
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("You need to be in a voice channel first!", ephemeral=True)
         return
 
-    channel = interaction.author.voice.channel
+    channel = interaction.user.voice.channel
 
     # 2. Connect to the channel
     try:
@@ -321,7 +312,7 @@ async def shoot(interaction: discord.ApplicationContext):
         vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
 
     if not interaction.response.is_done():
-        await interaction.respond("💥 Bang!", ephemeral=False)
+        await interaction.response.send_message("💥 Bang!", ephemeral=False)
 
     # 3. shoot someone
     await shoot_someone(
@@ -340,14 +331,14 @@ async def shoot(interaction: discord.ApplicationContext):
     await leave_voice(vc)
 
 
-@bot.slash_command(name="shootout", description="Shoot everyone in the channel, one by one")
-async def shootout(interaction: discord.ApplicationContext):
+@bot.tree.command(name="shootout", description="Shoot everyone in the channel, one by one")
+async def shootout(interaction: discord.Interaction):
     # 1. Check if user is in a voice channel
     if not interaction.user.voice or not interaction.user.voice.channel:
-        await interaction.respond("You need to be in a voice channel first!", ephemeral=True)
+        await interaction.response.send_message("You need to be in a voice channel first!", ephemeral=True)
         return
 
-    channel = interaction.author.voice.channel
+    channel = interaction.user.voice.channel
 
     # 2. Connect to the channel
     try:
@@ -366,8 +357,8 @@ async def shootout(interaction: discord.ApplicationContext):
         humans = [m for m in channel.members if not m.bot]
         if not humans:
             # No one left → report the last person shot
-            await interaction.send_followup(
-                f"Shootout finished. Last person shot was {last_target.nick if last_target else 'nobody'}."
+            await interaction.followup.send(
+                f"Shootout finished. Last person shot was {last_target.display_name if last_target else 'nobody'}."
             )
             break
 
@@ -392,13 +383,15 @@ async def shootout(interaction: discord.ApplicationContext):
     await leave_voice(vc)
 
 
-@bot.slash_command(name="music", description="Play a radio containing iconic stell dir drachen vor hits")
-async def music(interaction: discord.ApplicationContext):
-    user = interaction.author
+@bot.tree.command(name="music", description="Play a radio containing iconic stell dir drachen vor hits")
+async def music(interaction: discord.Interaction):
+    user = interaction.user
 
     # 1. Check if user is in a voice channel
     if not user.voice or not user.voice.channel:
-        await interaction.response.send_message("You need to be in a voice channel first!", ephemeral=True)
+        await interaction.response.send_message(
+            "You need to be in a voice channel first!", ephemeral=True
+        )
         return
 
     channel = user.voice.channel
@@ -410,7 +403,8 @@ async def music(interaction: discord.ApplicationContext):
         vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
 
     # 3. Send the initial message and get the Message object
-    msg = await interaction.respond("🔊 Starting playback...")
+    await interaction.response.send_message("🔊 Starting playback...")
+    msg = await interaction.original_response()
 
     # 4. Add reactions (pause, resume, stop, skip)
     reactions = ["⏸️", "▶️", "⏹️", "⏭️"]
@@ -429,14 +423,14 @@ async def music(interaction: discord.ApplicationContext):
     # 7. Start the first song
     sound_path = get_random_file()
     if not sound_path:
-        await interaction.send_followup("No sound files found!", ephemeral=True)
+        await interaction.followup.send("No sound files found!", ephemeral=True)
         return
     play_file(sound_path)
     await msg.edit(content=f"🔊 Now playing: `{os.path.basename(sound_path)}`")
 
     # 8. Reaction loop
     while True:
-        # Autoplay next song if finished
+        # Auto-play next song if finished
         if not vc.is_playing() and not vc.is_paused():
             sound_path = get_random_file()
             if not sound_path:
@@ -445,7 +439,7 @@ async def music(interaction: discord.ApplicationContext):
             await msg.edit(content=f"🔊 Now playing: `{os.path.basename(sound_path)}`")
 
         try:
-            reaction, reactor = bot.wait_for(
+            reaction, reactor = await bot.wait_for(
                 "reaction_add",
                 timeout=300.0,
                 check=lambda r, u: r.message.id == msg.id and u != bot.user and str(r.emoji) in reactions,
@@ -477,30 +471,32 @@ async def music(interaction: discord.ApplicationContext):
         await leave_voice(vc)
 
 
-@bot.slash_command(name="say", description="Convert text to speech")
-async def say(interaction: discord.ApplicationContext, text: str):
+@bot.tree.command(name="say", description="Convert text to speech")
+async def say(interaction: discord.Interaction, text: str):
     if not text:
         await interaction.response.send_message("❌ You must provide text!", ephemeral=True)
         return
 
-    if not interaction.author.voice or not interaction.author.voice.channel:
-        await interaction.response.send_message("⚠️ You must be in a voice channel!", ephemeral=True)
+    if len(text) >= 2000:
+        await interaction.response.send_message("⚠️ Text too long (max 2000 chars)!", ephemeral=True)
         return
 
-    await interaction.response.defer(ephemeral=True) 
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.followup.send("⚠️ You must be in a voice channel!", ephemeral=True)
+        return
 
-    channel = interaction.author.voice.channel
-    vc: discord.VoiceClient | None = discord.utils.get(bot.voice_clients, guild=interaction.guild)
-    if not vc or not vc.is_connected():
+    channel = interaction.user.voice.channel
+    try:
         vc = await channel.connect()
-    await asyncio.sleep(0.5)  # wait for handshake
+    except discord.ClientException:
+        vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
 
     text = await replace_speech_placeholders(text, vc)
     audio_path = await generate_speech(text)
     play_audio(vc, audio_path)
 
-    # Send follow-up instead of respond
-    await interaction.followup.send(f"🗣️ Generated speech for: *{text}*", ephemeral=True)
+    # Send confirmation
+    await interaction.response.send_message(f"🗣️ Generated speech for: *{text}*", ephemeral=True)
 
     while vc.is_playing():
         await asyncio.sleep(0.5)
@@ -508,21 +504,20 @@ async def say(interaction: discord.ApplicationContext, text: str):
     await leave_voice(vc)
 
 
-
-@bot.slash_command(name="ask", description="Ask Thorsten something.")
-async def askai(interaction: discord.ApplicationContext, prompt: str):
-    await interaction.defer(ephemeral=True)
+@bot.tree.command(name="ask", description="Ask Thorsten something.")
+async def askai(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer(ephemeral=True)
 
     # Connect to user's voice channel
-    if not interaction.author.voice or not interaction.author.voice.channel:
-        await interaction.send_followup("⚠️ You must be in a voice channel!", ephemeral=True)
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.followup.send("⚠️ You must be in a voice channel!", ephemeral=True)
         return
 
-    channel = interaction.author.voice.channel
+    channel = interaction.user.voice.channel
     try:
         vc = await channel.connect()
     except discord.ClientException:
-        vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
+        vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
 
     # Build context and prepend to prompt
     context_str = await build_ai_context(vc)
@@ -537,7 +532,7 @@ async def askai(interaction: discord.ApplicationContext, prompt: str):
 
     # Play audio
     play_audio(vc, audio_path)
-    await interaction.send_followup("✅ Finished generating speech!", ephemeral=True)
+    await interaction.followup.send("✅ Finished generating speech!", ephemeral=True)
 
     while vc.is_playing():
         await asyncio.sleep(0.5)
@@ -551,25 +546,23 @@ async def auto_voice_manager():
     global conversationStarted
     if not conversationStarted:
         for guild in bot.guilds:
-            vc: discord.VoiceClient | None = discord.utils.get(bot.voice_clients, guild=guild)
+            vc = discord.utils.get(bot.voice_clients, guild=guild)
 
             # Case 1: Already connected
             if vc and vc.channel:
-                if isinstance(vc.channel, (discord.VoiceChannel, discord.StageChannel)):
-                    humans = [m for m in vc.channel.members if not m.bot]
-                    if not humans:
-                        # No humans left in channel
-                        await leave_voice(vc)
-                        print(f"❌ Disconnected from empty channel {vc.channel.name} in {guild.name}")
-                    else:
-                        # Still users there, stay
-                        continue
+                if len([m for m in vc.channel.members if not m.bot]) == 0:
+                    # No humans left in channel
+                    await leave_voice(vc)
+                    print(f"❌ Disconnected from empty channel {vc.channel.name} in {guild.name}")
+                else:
+                    # Still users there, stay
+                    continue
 
-            # Case 2: Random chance to connect to a channel with humans
             if random.randrange(1, 1000) == 1:
+                # Case 2: Not connected → try to find a channel with people
                 for channel in guild.voice_channels:
-                    humans = [m for m in channel.members if not m.bot]
-                    if humans:
+                    members = [m for m in channel.members if not m.bot]
+                    if members:  # found humans
                         try:
                             await channel.connect()
                             conversationStarted = True
@@ -579,41 +572,38 @@ async def auto_voice_manager():
                         break  # only join one channel per guild
 
 
-
 @tasks.loop(seconds=5)
 async def random_speaker():
     global conversationStarted
     if conversationStarted:
         for guild in bot.guilds:
-            vc: discord.VoiceClient | None = discord.utils.get(bot.voice_clients, guild=guild)
+            vc = discord.utils.get(bot.voice_clients, guild=guild)
 
             if vc and vc.is_connected() and not vc.is_playing():
-                if isinstance(vc.channel, (discord.VoiceChannel, discord.StageChannel)):
-                    # Only speak if there's at least 1 human in the channel
-                    if any(not m.bot for m in vc.channel.members):
-                        if random.choice([True, False]):
-                            global conversationCount
-                            if conversationCount == 0:
-                                text = random.choice(greetings)
-                            elif conversationCount == 4:
-                                text = random.choice(conversationEnds)
-                            else:
-                                text = random.choice(conversationTexts)
+                # Only speak if there's at least 1 human in the channel
+                if any(not m.bot for m in vc.channel.members):
+                    if random.choice([True, False]):
+                        global conversationCount
+                        if conversationCount == 0:
+                            text = random.choice(greetings)
+                        elif conversationCount == 4:
+                            text = random.choice(conversationEnds)
+                        else:
+                            text = random.choice(conversationTexts)
 
-                            text = await replace_speech_placeholders(text, vc)
-                            audio_path = await generate_speech(text, "random_tts.wav")
-                            print(f"🗣️ Saying: {text}")
+                        text = await replace_speech_placeholders(text, vc)
+                        audio_path = await generate_speech(text, "random_tts.wav")
+                        print(f"🗣️ Saying: {text}")
 
-                            # Play inside the connected VC
-                            play_audio(vc, audio_path)
-                            while vc.is_playing():
-                                await asyncio.sleep(0.5)
+                        # Play inside the connected VC
+                        play_audio(vc, audio_path)
+                        while vc.is_playing():
+                            await asyncio.sleep(0.5)
 
-                            if conversationCount == 4:
-                                await leave_voice(vc)
-                            else:
-                                conversationCount += 1
-
+                        if conversationCount == 4:
+                            await leave_voice(vc)
+                        else:
+                            conversationCount += 1
 
 @tasks.loop(minutes=5)
 async def keep_alive_ping():
