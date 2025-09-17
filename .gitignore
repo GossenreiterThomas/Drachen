@@ -2,4 +2,4 @@
 .venv
 .idea
 tts/
-models/
+ollama_data/
