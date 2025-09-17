@@ -480,34 +480,33 @@ async def music(interaction: discord.ApplicationContext):
 @bot.slash_command(name="say", description="Convert text to speech")
 async def say(interaction: discord.ApplicationContext, text: str):
     if not text:
-        await interaction.respond("❌ You must provide text!", ephemeral=True)
-        return
-
-    if len(text) >= 2000:
-        await interaction.respond("⚠️ Text too long (max 2000 chars)!", ephemeral=True)
+        await interaction.response.send_message("❌ You must provide text!", ephemeral=True)
         return
 
     if not interaction.author.voice or not interaction.author.voice.channel:
-        await interaction.send_followup("⚠️ You must be in a voice channel!", ephemeral=True)
+        await interaction.response.send_message("⚠️ You must be in a voice channel!", ephemeral=True)
         return
 
+    await interaction.response.defer(ephemeral=True) 
+
     channel = interaction.author.voice.channel
-    try:
+    vc: discord.VoiceClient | None = discord.utils.get(bot.voice_clients, guild=interaction.guild)
+    if not vc or not vc.is_connected():
         vc = await channel.connect()
-    except discord.ClientException:
-        vc = discord.utils.get(bot.voice_clients, guild=interaction.guild)
+    await asyncio.sleep(0.5)  # wait for handshake
 
     text = await replace_speech_placeholders(text, vc)
     audio_path = await generate_speech(text)
     play_audio(vc, audio_path)
 
-    # Send confirmation
-    await interaction.respond(f"🗣️ Generated speech for: *{text}*")
+    # Send follow-up instead of respond
+    await interaction.followup.send(f"🗣️ Generated speech for: *{text}*", ephemeral=True)
 
     while vc.is_playing():
         await asyncio.sleep(0.5)
 
     await leave_voice(vc)
+
 
 
 @bot.slash_command(name="ask", description="Ask Thorsten something.")
