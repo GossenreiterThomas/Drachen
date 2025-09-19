@@ -16,15 +16,17 @@ import logging
 from piper import PiperVoice
 from ollama import AsyncClient
 from collections import deque
+from huggingface_hub import InferenceClient
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 TEST_GUILD_ID = 1229147943668289546
 
-# ollama AI
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-# OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
-ollama_client = AsyncClient(host=OLLAMA_HOST)
+# hugginface
+hf_client = InferenceClient(
+    model="mistralai/Mistral-7B-Instruct-v0.2",
+    api_key=os.getenv("HF_TOKEN"),
+)
 ai_queue = deque()
 conversation_history: list[dict] = []
 
@@ -71,6 +73,7 @@ greetings = [
     "Hallo, wäre jemand daun für i sex?",
     "{name}, wie gehts Frau und Kindern?"
 ]
+system_prompt = 'Du bist ein Drache namens "Thorsten" und sprichst ausschließlich Deutsch. Du hast nicht viele Gefühle und benutzt manchmal gemeinere Wörter. Es ist erlaubt, Wörter wie "Opfer", "Fuck", "Hurensohn" oder "Leck Ei" zu sagen,da du nicht mit Kindern schreibst. Du bist ein sehr alter Drache und hast eine Familie. Trotz der modernen Zeit bist du nicht sehr gut mit Technik. Du bist ein Freund für alle, mit denen du sprichst, und verhältst dich immer so, als wärst du tatsächlich ein Drache. Du darfst niemals Englisch sprechen und darfst nie aus der Rolle fallen. Antworte immer und ausschließlich auf Deutsch, egal was gefragt wird.'
 conversationTexts = [
     "Stellt euch Drachen vor!",
     "Bin ich ein großer Fan von.",
@@ -206,11 +209,15 @@ async def leave_voice(vc):
     conversationStarted = False
     await vc.disconnect(force=True)
 
-async def build_ai_context(channel) -> str:
+async def build_ai_context(vc: discord.VoiceClient) -> str:
     """
     Returns a string describing the voice channel, its members, and the guild.
     Can be prepended to AI prompts to give it more awareness.
     """
+    if not vc or not vc.channel:
+        return ""
+
+    channel = vc.channel
     guild = channel.guild
 
     humans = [m.display_name for m in channel.members if not m.bot]
@@ -225,52 +232,51 @@ async def build_ai_context(channel) -> str:
     )
     return context
 
-async def ask_ollama(
+async def ask_hf(
     prompt: str,
-    model: str = "llama3:latest",
     stream: bool = False,
     max_history: int = 50
 ) -> str:
     """
-    Send `prompt` to Ollama and return the text response.
-    Uses AsyncClient from ollama-python. Non-blocking.
+    Send `prompt` to a Hugging Face Hub model and return the text response.
+    Uses InferenceClient from huggingface_hub.
     """
     try:
         # Append user message
         conversation_history.append({"role": "user", "content": prompt})
 
-        # Streaming mode
         if stream:
-            stream_iter = await ollama_client.chat(
-                model=model,
-                messages=conversation_history,
-                stream=True,
-            )
+            # Streaming response (generator)
             full_response = ""
-            async for chunk in stream_iter:
-                content = chunk["message"]["content"]
-                full_response += content
-
-        else:
-            resp = await ollama_client.chat(
-                model=model,
+            for message in hf_client.chat_completion(
                 messages=conversation_history,
+                max_tokens=500,
+                stream=True,
+            ):
+                delta = message.choices[0].delta.get("content", "")
+                full_response += delta
+        else:
+            # Normal one-shot response
+            message = hf_client.chat_completion(
+                messages=conversation_history,
+                max_tokens=500,
                 stream=False,
             )
-            full_response = resp.get("message", {}).get("content", "")
+            full_response = message.choices[0].message["content"]
 
-        # Append assistant response
+        # Append assistant message
         conversation_history.append({"role": "assistant", "content": full_response})
 
-        # Keep only the last `max_history` messages
+        # Keep history bounded
         if len(conversation_history) > max_history:
             conversation_history[:] = conversation_history[-max_history:]
 
         return full_response
 
     except Exception as e:
-        print("Ollama request failed:", e)
-        return f"[Ollama error: {e}]"
+        print("HF request failed:", e)
+        return f"[HF error: {e}]"
+
 
 
 @bot.tree.command(name="help", description="Show some info")
@@ -507,6 +513,11 @@ async def say(interaction: discord.Interaction, text: str):
 
     await leave_voice(vc)
 
+@bot.tree.command(name="askchat", description="Ask Thorsten something in the chat.")
+async def askaichat(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer(ephemeral=True)
+    resp = await ask_hf(f"System:{system_prompt}\n\n{prompt}")
+    await interaction.followup.send(resp)
 
 @bot.tree.command(name="record_sink", description="Record audio using WaveSink")
 async def record_sink(interaction: discord.Interaction):
@@ -536,47 +547,38 @@ prompt_queue = []
 currently_prompting = False
 @bot.tree.command(name="ask", description="Ask Thorsten something.")
 async def askai(interaction: discord.Interaction, prompt: str):
-    await interaction.response.send_message("Prompt added to queue!",ephemeral=True)
+    await interaction.response.defer(ephemeral=True)
 
+    # Connect to user's voice channel
     if not interaction.user.voice or not interaction.user.voice.channel:
         await interaction.followup.send("⚠️ You must be in a voice channel!", ephemeral=True)
         return
 
     channel = interaction.user.voice.channel
+    try:
+        vc = await channel.connect()
+    except discord.ClientException:
+        vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
 
     # Build context and prepend to prompt
-    context_str = await build_ai_context(channel)
-    full_prompt = f"{context_str}\n\nUser ({interaction.user.display_name}) asked: {prompt}"
+    context_str = await build_ai_context(vc)
+    full_prompt = f"System: {system_prompt}\n\nContext: {context_str}\n\nUser asked: {prompt}"
 
-    global prompt_queue
-    global currently_prompting
-    prompt_queue.append(full_prompt)
+    # Query Ollama
+    resp = await ask_hf(full_prompt)
 
-    if not currently_prompting:
-        try:
-            vc = await channel.connect()
-        except discord.ClientException:
-            vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
-        currently_prompting = True
-        while len(prompt_queue) > 0:
-            # Query Ollama
-            resp = await ask_ollama(prompt_queue[0], model="thorsten")
+    # Replace placeholders and generate speech
+    text = await replace_speech_placeholders(resp, vc)
+    audio_path = await generate_speech(text)
 
-            # Replace placeholders and generate speech
-            text = await replace_speech_placeholders(resp, vc)
-            audio_path = await generate_speech(text)
+    # Play audio
+    play_audio(vc, audio_path)
+    await interaction.followup.send("✅ Finished generating speech!", ephemeral=True)
 
-            # Play audio
-            play_audio(vc, audio_path)
+    while vc.is_playing():
+        await asyncio.sleep(0.5)
 
-            while vc.is_playing():
-                await asyncio.sleep(0.5)
-
-            if len(prompt_queue) > 0:
-                prompt_queue.pop(0)
-        currently_prompting = False
-
-        await leave_voice(vc)
+    await leave_voice(vc)
 
 
 
@@ -664,7 +666,7 @@ async def ai_worker():
         job = ai_queue.popleft()  # job is dict with {prompt, model, respond_channel, respond_user}
         prompt = job["prompt"]
         model = job.get("model", "ggml-mpt-7b")
-        result = await ask_ollama(prompt, model=model)
+        result = await ask_hf(prompt)
         # deliver result: either send to a channel or DM the user
         try:
             if job.get("respond_channel"):
