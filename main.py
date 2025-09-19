@@ -14,15 +14,17 @@ import logging
 from piper import PiperVoice
 from ollama import AsyncClient
 from collections import deque
+from huggingface_hub import InferenceClient
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 TEST_GUILD_ID = 1229147943668289546
 
-# ollama AI
-#OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
-ollama_client = AsyncClient(host=OLLAMA_HOST)
+# hugginface
+hf_client = InferenceClient(
+    model="mistralai/Mistral-7B-Instruct-v0.2",
+    api_key=os.getenv("HF_TOKEN"),
+)
 ai_queue = deque()
 conversation_history: list[dict] = []
 
@@ -223,52 +225,51 @@ async def build_ai_context(vc: discord.VoiceClient) -> str:
     )
     return context
 
-async def ask_ollama(
+async def ask_hf(
     prompt: str,
-    model: str = "llama3:latest",
     stream: bool = False,
     max_history: int = 50
 ) -> str:
     """
-    Send `prompt` to Ollama and return the text response.
-    Uses AsyncClient from ollama-python. Non-blocking.
+    Send `prompt` to a Hugging Face Hub model and return the text response.
+    Uses InferenceClient from huggingface_hub.
     """
     try:
         # Append user message
         conversation_history.append({"role": "user", "content": prompt})
 
-        # Streaming mode
         if stream:
-            stream_iter = await ollama_client.chat(
-                model=model,
-                messages=conversation_history,
-                stream=True,
-            )
+            # Streaming response (generator)
             full_response = ""
-            async for chunk in stream_iter:
-                content = chunk["message"]["content"]
-                full_response += content
-
-        else:
-            resp = await ollama_client.chat(
-                model=model,
+            for message in hf_client.chat_completion(
                 messages=conversation_history,
+                max_tokens=500,
+                stream=True,
+            ):
+                delta = message.choices[0].delta.get("content", "")
+                full_response += delta
+        else:
+            # Normal one-shot response
+            message = hf_client.chat_completion(
+                messages=conversation_history,
+                max_tokens=500,
                 stream=False,
             )
-            full_response = resp.get("message", {}).get("content", "")
+            full_response = message.choices[0].message["content"]
 
-        # Append assistant response
+        # Append assistant message
         conversation_history.append({"role": "assistant", "content": full_response})
 
-        # Keep only the last `max_history` messages
+        # Keep history bounded
         if len(conversation_history) > max_history:
             conversation_history[:] = conversation_history[-max_history:]
 
         return full_response
 
     except Exception as e:
-        print("Ollama request failed:", e)
-        return f"[Ollama error: {e}]"
+        print("HF request failed:", e)
+        return f"[HF error: {e}]"
+
 
 
 @bot.tree.command(name="help", description="Show some info")
@@ -505,6 +506,11 @@ async def say(interaction: discord.Interaction, text: str):
 
     await leave_voice(vc)
 
+@bot.tree.command(name="askchat", description="Ask Thorsten something in the chat.")
+async def askaichat(interaction: discord.Interaction, prompt: str):
+    await interaction.response.defer(ephemeral=True)
+    resp = await ask_hf(prompt)
+    await interaction.followup.send(resp)
 
 @bot.tree.command(name="ask", description="Ask Thorsten something.")
 async def askai(interaction: discord.Interaction, prompt: str):
@@ -526,7 +532,7 @@ async def askai(interaction: discord.Interaction, prompt: str):
     full_prompt = f"{context_str}\n\nUser asked: {prompt}"
 
     # Query Ollama
-    resp = await ask_ollama(full_prompt, model="thorsten")
+    resp = await ask_hf(full_prompt)
 
     # Replace placeholders and generate speech
     text = await replace_speech_placeholders(resp, vc)
@@ -617,8 +623,6 @@ async def keep_alive_ping():
         # ping each guild to ensure the bot is considered active
         print(f"💓 Keep-alive ping for guild: {guild.name} ({guild.id})")
 
-
-
 async def ai_worker():
     while True:
         if not ai_queue:
@@ -627,7 +631,7 @@ async def ai_worker():
         job = ai_queue.popleft()  # job is dict with {prompt, model, respond_channel, respond_user}
         prompt = job["prompt"]
         model = job.get("model", "ggml-mpt-7b")
-        result = await ask_ollama(prompt, model=model)
+        result = await ask_hf(prompt)
         # deliver result: either send to a channel or DM the user
         try:
             if job.get("respond_channel"):
