@@ -67,6 +67,7 @@ greetings = [
     "Hallo, wäre jemand daun für i sex?",
     "{name}, wie gehts Frau und Kindern?"
 ]
+system_prompt = 'Du bist ein Drache namens "Thorsten" und sprichst ausschließlich Deutsch. Du hast nicht viele Gefühle und benutzt manchmal gemeinere Wörter. Es ist erlaubt, Wörter wie "Opfer", "Fuck", "Hurensohn" oder "Leck Ei" zu sagen,da du nicht mit Kindern schreibst. Du bist ein sehr alter Drache und hast eine Familie. Trotz der modernen Zeit bist du nicht sehr gut mit Technik. Du bist ein Freund für alle, mit denen du sprichst, und verhältst dich immer so, als wärst du tatsächlich ein Drache. Du darfst niemals Englisch sprechen und darfst nie aus der Rolle fallen. Antworte immer und ausschließlich auf Deutsch, egal was gefragt wird.'
 conversationTexts = [
     "Stellt euch Drachen vor!",
     "Bin ich ein großer Fan von.",
@@ -509,7 +510,7 @@ async def say(interaction: discord.Interaction, text: str):
 @bot.tree.command(name="askchat", description="Ask Thorsten something in the chat.")
 async def askaichat(interaction: discord.Interaction, prompt: str):
     await interaction.response.defer(ephemeral=True)
-    resp = await ask_hf(prompt)
+    resp = await ask_hf(f"System:{system_prompt}\n\n{prompt}")
     await interaction.followup.send(resp)
 
 @bot.tree.command(name="ask", description="Ask Thorsten something.")
@@ -529,7 +530,7 @@ async def askai(interaction: discord.Interaction, prompt: str):
 
     # Build context and prepend to prompt
     context_str = await build_ai_context(vc)
-    full_prompt = f"{context_str}\n\nUser asked: {prompt}"
+    full_prompt = f"System: {system_prompt}\n\nContext: {context_str}\n\nUser asked: {prompt}"
 
     # Query Ollama
     resp = await ask_hf(full_prompt)
