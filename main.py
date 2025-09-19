@@ -8,6 +8,8 @@ import secrets
 
 import discord
 from discord.ext import commands, tasks
+from discord.ext import voice_recv
+from discord.ext.voice_recv import sinks
 import os
 from dotenv import load_dotenv
 import logging
@@ -20,8 +22,8 @@ DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 TEST_GUILD_ID = 1229147943668289546
 
 # ollama AI
-#OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
+OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+# OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://ollama:11434")
 ollama_client = AsyncClient(host=OLLAMA_HOST)
 ai_queue = deque()
 conversation_history: list[dict] = []
@@ -31,10 +33,14 @@ intents = discord.Intents.all()
 
 # enable debug logging to see what discord.py is doing
 logging.basicConfig(level=logging.INFO)
+logging.getLogger("discord.ext.voice_recv.opus").setLevel(logging.CRITICAL)
+logger = logging.getLogger("discord.ext.voice_recv.opus")
+logger.addHandler(logging.NullHandler())
 
 class MyBot(commands.Bot):
     def __init__(self):
         super().__init__(command_prefix="!", intents=intents)
+        self.voice_buffers = {}  # user_id -> list of PCM chunks
 
     async def setup_hook(self):
         # Register commands into ONE test guild for instant availability (dev)
@@ -200,15 +206,11 @@ async def leave_voice(vc):
     conversationStarted = False
     await vc.disconnect(force=True)
 
-async def build_ai_context(vc: discord.VoiceClient) -> str:
+async def build_ai_context(channel) -> str:
     """
     Returns a string describing the voice channel, its members, and the guild.
     Can be prepended to AI prompts to give it more awareness.
     """
-    if not vc or not vc.channel:
-        return ""
-
-    channel = vc.channel
     guild = channel.guild
 
     humans = [m.display_name for m in channel.members if not m.bot]
@@ -432,7 +434,7 @@ async def music(interaction: discord.Interaction):
 
     # 8. Reaction loop
     while True:
-        # Auto-play next song if finished
+        # Autoplay next song if finished
         if not vc.is_playing() and not vc.is_paused():
             sound_path = get_random_file()
             if not sound_path:
@@ -506,40 +508,75 @@ async def say(interaction: discord.Interaction, text: str):
     await leave_voice(vc)
 
 
+@bot.tree.command(name="record_sink", description="Record audio using WaveSink")
+async def record_sink(interaction: discord.Interaction):
+    if not interaction.user.voice or not interaction.user.voice.channel:
+        await interaction.response.send_message("⚠️ Join a VC first", ephemeral=True)
+        return
+
+    channel = interaction.user.voice.channel
+    vc = await channel.connect(cls=voice_recv.VoiceRecvClient)
+
+    from discord.ext.voice_recv import sinks
+    sink = sinks.WaveSink("recordings/test.wav")
+    vc.listen(sink)
+
+    await interaction.response.send_message(f"🎙️ Recording in {channel.name} for 15 seconds...")
+    await asyncio.sleep(15)
+
+    vc.stop_listening()
+    await leave_voice(vc)
+
+    await interaction.followup.send("✅ Finished recording and saved files")
+
+
+
+
+prompt_queue = []
+currently_prompting = False
 @bot.tree.command(name="ask", description="Ask Thorsten something.")
 async def askai(interaction: discord.Interaction, prompt: str):
-    await interaction.response.defer(ephemeral=True)
+    await interaction.response.send_message("Prompt added to queue!",ephemeral=True)
 
-    # Connect to user's voice channel
     if not interaction.user.voice or not interaction.user.voice.channel:
         await interaction.followup.send("⚠️ You must be in a voice channel!", ephemeral=True)
         return
 
     channel = interaction.user.voice.channel
-    try:
-        vc = await channel.connect()
-    except discord.ClientException:
-        vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
 
     # Build context and prepend to prompt
-    context_str = await build_ai_context(vc)
-    full_prompt = f"{context_str}\n\nUser asked: {prompt}"
+    context_str = await build_ai_context(channel)
+    full_prompt = f"{context_str}\n\nUser ({interaction.user.display_name}) asked: {prompt}"
 
-    # Query Ollama
-    resp = await ask_ollama(full_prompt, model="thorsten")
+    global prompt_queue
+    global currently_prompting
+    prompt_queue.append(full_prompt)
 
-    # Replace placeholders and generate speech
-    text = await replace_speech_placeholders(resp, vc)
-    audio_path = await generate_speech(text)
+    if not currently_prompting:
+        try:
+            vc = await channel.connect()
+        except discord.ClientException:
+            vc = discord.utils.get(interaction.client.voice_clients, guild=interaction.guild)
+        currently_prompting = True
+        while len(prompt_queue) > 0:
+            # Query Ollama
+            resp = await ask_ollama(prompt_queue[0], model="thorsten")
 
-    # Play audio
-    play_audio(vc, audio_path)
-    await interaction.followup.send("✅ Finished generating speech!", ephemeral=True)
+            # Replace placeholders and generate speech
+            text = await replace_speech_placeholders(resp, vc)
+            audio_path = await generate_speech(text)
 
-    while vc.is_playing():
-        await asyncio.sleep(0.5)
+            # Play audio
+            play_audio(vc, audio_path)
 
-    await leave_voice(vc)
+            while vc.is_playing():
+                await asyncio.sleep(0.5)
+
+            if len(prompt_queue) > 0:
+                prompt_queue.pop(0)
+        currently_prompting = False
+
+        await leave_voice(vc)
 
 
 
