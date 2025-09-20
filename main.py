@@ -38,10 +38,11 @@ class MyBot(commands.Bot):
         await self.load_extension("cogs.ai_cog")
         await self.load_extension("cogs.record_cog")
         await self.load_extension("cogs.voice_loops_cog")
+        await self.load_extension("cogs.blackjack_cog")
 
         # Register commands into ONE test guild for instant availability (dev)
         guild = discord.Object(id=TEST_GUILD_ID)
-        # self.tree.copy_global_to(guild=guild)
+        self.tree.copy_global_to(guild=guild)
         await self.tree.sync(guild=guild)
 
     async def on_ready(self):
