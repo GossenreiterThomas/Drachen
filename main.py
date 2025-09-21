@@ -39,6 +39,8 @@ class MyBot(commands.Bot):
         await self.load_extension("cogs.record_cog")
         await self.load_extension("cogs.voice_loops_cog")
         await self.load_extension("cogs.blackjack_cog")
+        await self.load_extension("cogs.streaming_cog")
+        await self.load_extension("cogs.russian_roulette_cog")
 
         # Register commands into ONE test guild for instant availability (dev)
         guild = discord.Object(id=TEST_GUILD_ID)
