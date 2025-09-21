@@ -3,4 +3,4 @@ python-dotenv
 piper-tts
 pynacl
 huggingface_hub
-vlask
+vosk
