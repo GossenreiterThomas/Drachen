@@ -3,4 +3,5 @@
 .idea
 tts/
 ollama_data/
-
+__pycache__/
+cogs/__pycache__/
