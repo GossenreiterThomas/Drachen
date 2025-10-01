@@ -30,18 +30,7 @@ class MyBot(commands.Bot):
 
     async def setup_hook(self):
         # Load cogs
-        await self.load_extension("cogs.info_cog")
-        await self.load_extension("cogs.imagine_cog")
-        await self.load_extension("cogs.shoot_cog")
-        await self.load_extension("cogs.music_cog")
-        await self.load_extension("cogs.say_cog")
-        await self.load_extension("cogs.ai_cog")
-        await self.load_extension("cogs.record_cog")
-        await self.load_extension("cogs.voice_loops_cog")
-        await self.load_extension("cogs.blackjack_cog")
-        await self.load_extension("cogs.streaming_cog")
-        await self.load_extension("cogs.russian_roulette_cog")
-        await self.load_extension("cogs.kba_cog")
+        await self.load_extension("cogs")
 
         # Register commands into ONE test guild for instant availability (dev)
         guild = discord.Object(id=TEST_GUILD_ID)
