@@ -4,3 +4,4 @@ piper-tts
 pynacl
 huggingface_hub
 vosk
+ollama
