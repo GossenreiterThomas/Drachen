@@ -9,3 +9,25 @@ services:
       - ./.env:/.env:Z
     env_file:
       - .env
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      # Persist Ollama data (models, cache)
+      - ./models/ollama:/root/.ollama
+      # Mount Modelfile for custom model building
+      - ./models/Modelfile:/Modelfile
+    environment:
+      # Optional: customize model repo or GPU settings
+      - OLLAMA_HOST=0.0.0.0
+    command: >
+      sh -c "
+      ollama serve &
+      sleep 5 &&
+      ollama create mymodel -f /Modelfile &&
+      tail -f /dev/null
+      "

@@ -5,3 +5,4 @@ tts/
 ollama_data/
 __pycache__/
 cogs/__pycache__/
+models/ollama
