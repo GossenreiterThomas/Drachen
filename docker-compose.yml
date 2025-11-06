@@ -22,9 +22,9 @@ services:
       - "11434:11434"
     volumes:
       # Persist Ollama data (models, cache)
-      - ./models/ollama:/root/.ollama
+      - ./models/ollama:/root/.ollama:Z
       # Mount Modelfile for custom model building
-      - ./models/Modelfile:/Modelfile
+      - ./models/Modelfile:/Modelfile:Z
     #deploy:
     #resources:
     #reservations:
