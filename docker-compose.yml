@@ -9,9 +9,13 @@ services:
       - ./.env:/.env:Z
     env_file:
       - .env
-
   ollama:
-    image: ollama/ollama:latest
+    #image: ollama/ollama:latest
+    build:
+      context: .
+      dockerfile: Dockerfile_ollama
+      args:
+        MODEL_FILE: Dockerfile_ollama
     container_name: ollama
     restart: unless-stopped
     ports:
@@ -21,13 +25,10 @@ services:
       - ./models/ollama:/root/.ollama
       # Mount Modelfile for custom model building
       - ./models/Modelfile:/Modelfile
-    environment:
-      # Optional: customize model repo or GPU settings
-      - OLLAMA_HOST=0.0.0.0
-    command: >
-      sh -c "
-      ollama serve &
-      sleep 5 &&
-      ollama create mymodel -f /Modelfile &&
-      tail -f /dev/null
-      "
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]

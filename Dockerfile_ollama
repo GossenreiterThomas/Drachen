@@ -1,0 +1,11 @@
+FROM ollama/ollama:latest
+
+# Copy your custom modelfile
+COPY ./models/Modelfile /Modelfile
+
+# Copy startup script
+COPY ./startollama.sh /start.sh
+RUN chmod +x /start.sh
+
+EXPOSE 11434
+ENTRYPOINT ["/start.sh"]
