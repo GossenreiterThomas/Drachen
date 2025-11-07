@@ -29,11 +29,11 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/${{ github.repository_owner }}/thorsten-bot:latest
+          tags: ghcr.io/${{ env.OWNER_LC }}/thorsten-bot:latest
       - name: Build and push Docker image for Ollama
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           file: ./Dockerfile_ollama
-          tags: ghcr.io/${{ github.repository_owner }}/thorsten-bot:latest
+          tags: ghcr.io/${{ env.OWNER_LC }}/thorsten-ollama:latest
