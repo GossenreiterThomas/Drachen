@@ -6,11 +6,11 @@ ollama serve &
 sleep 5
 
 # Create the model if it doesn't exist
-if ! ollama show mymodel >/dev/null 2>&1; then
-    echo "Creating model 'mymodel' from /Modelfile..."
-    ollama create mymodel -f /Modelfile
+if ! ollama show thorsten >/dev/null 2>&1; then
+    echo "Creating model 'thorsten' from /Modelfile..."
+    ollama create thorsten -f /Modelfile
 else
-    echo "Model 'mymodel' already exists, skipping build."
+    echo "Model 'thorsten' already exists, skipping build."
 fi
 
 # Keep the container alive
