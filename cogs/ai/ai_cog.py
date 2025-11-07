@@ -3,11 +3,13 @@ import asyncio
 import datetime
 import os
 from collections import deque
+import datetime
+import asyncio
 
 import discord
 from discord.ext import commands
 
-from main import generate_speech, leave_voice, play_audio, replace_speech_placeholders
+from main import generate_speech, leave_voice, play_audio, replace_speech_placeholders, logging
 
 # Ollama-Konfiguration
 OLLAMA_MODEL = "thorsten"
@@ -65,7 +67,7 @@ async def ask_ollama(prompt: str, max_history: int = 50) -> str:
         return full_response
 
     except Exception as e:
-        print(e)
+        logging.exception(e)
         return "Verdammt nochmal, jetzt funktioniert's wieder nicht! Gib mir mal 'ne Minute Zeit..."
 
 
