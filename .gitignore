@@ -6,3 +6,8 @@ ollama_data/
 __pycache__/
 cogs/__pycache__/
 models/ollama
+discord-bot-deployment.yaml
+env-configmap.yaml
+ollama-deployment.yaml
+ollama-service.yaml
+ollamadata-persistentvolumeclaim.yaml
