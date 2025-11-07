@@ -1,11 +1,15 @@
 # cogs/ask_cog.py
-import discord
-from discord.ext import commands
+import asyncio
+import datetime
 import os
 from collections import deque
 import datetime
 import asyncio
-from main import replace_speech_placeholders, generate_speech, play_audio, leave_voice, logging
+
+import discord
+from discord.ext import commands
+
+from main import generate_speech, leave_voice, play_audio, replace_speech_placeholders, logging
 
 # Ollama-Konfiguration
 OLLAMA_MODEL = "thorsten"
@@ -33,16 +37,13 @@ async def build_ai_context(channel: discord.VoiceChannel) -> str:
     return context
 
 
-async def ask_ollama(
-        prompt: str,
-        max_history: int = 50
-) -> str:
+async def ask_ollama(prompt: str, max_history: int = 50) -> str:
     """Sendet eine Anfrage an das lokale Ollama-Model und gibt die Antwort zurück."""
     import ollama
 
     try:
         # Initialisiere den Ollama-Client
-        client = ollama.Client()
+        client = ollama.Client(host="ollama:11434")
 
         # Erstelle die vollständige Prompt-Nachricht
         full_prompt = f"Kontext: {prompt}\n"
@@ -50,15 +51,11 @@ async def ask_ollama(
             full_prompt += "\nGesprächsverlauf:\n"
             for msg in conversation_history[-max_history:]:
                 # Füge Discord-Namen statt 'Benutzer' oder 'Thorsten' hinzu
-                user_name = msg.get('user_name', 'Thorsten')
+                user_name = msg.get("user_name", "Thorsten")
                 full_prompt += f"{user_name}: {msg['content']}\n"
 
         # Einzelne Antwort
-        message = client.generate(
-            model=OLLAMA_MODEL,
-            prompt=full_prompt,
-            stream=False
-        )
+        message = client.generate(model=OLLAMA_MODEL, prompt=full_prompt, stream=False)
         full_response = message["response"]
         print(full_response)
 
@@ -72,6 +69,7 @@ async def ask_ollama(
     except Exception as e:
         logging.exception(e)
         return "Verdammt nochmal, jetzt funktioniert's wieder nicht! Gib mir mal 'ne Minute Zeit..."
+
 
 async def ai_worker():
     while True:
@@ -92,6 +90,7 @@ async def ai_worker():
                 await job["respond_user"].send(result)
         except Exception as e:
             print(f"Fehler beim Senden der KI-Antwort: {e}")
+
 
 async def ai_response_queue_tts(channel: discord.VoiceChannel):
     global currently_speaking
@@ -125,7 +124,9 @@ class AiCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @discord.app_commands.command(name="askchat", description="Frage Thorsten etwas im Chat.")
+    @discord.app_commands.command(
+        name="askchat", description="Frage Thorsten etwas im Chat."
+    )
     async def askchat(self, interaction: discord.Interaction, prompt: str):
         await interaction.response.defer(ephemeral=True)
 
@@ -143,7 +144,9 @@ class AiCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         if not interaction.user.voice or not interaction.user.voice.channel:
-            await interaction.followup.send("⚠️ Du musst in einem Sprachkanal sein!", ephemeral=True)
+            await interaction.followup.send(
+                "⚠️ Du musst in einem Sprachkanal sein!", ephemeral=True
+            )
             return
 
         channel = interaction.user.voice.channel
@@ -170,23 +173,24 @@ class AiCog(commands.Cog):
     # Neue Methode zum Speichern der Nachrichten mit Benutzernamen
     async def save_message(self, user: discord.Member, content: str):
         """Speichert eine Nachricht mit dem Benutzernamen in der Konversationshistorie."""
-        conversation_history.append({
-            "role": "user",
-            "content": content,
-            "user_name": user.display_name
-        })
+        conversation_history.append(
+            {"role": "user", "content": content, "user_name": user.display_name}
+        )
 
-    @discord.app_commands.command(name="print-context", description="Die History mit der Thorsten arbeitet.")
+    @discord.app_commands.command(
+        name="print-context", description="Die History mit der Thorsten arbeitet."
+    )
     async def printContext(self, interaction: discord.Interaction):
         full_prompt = ""
 
         if conversation_history:
             full_prompt += "\nGesprächsverlauf:\n"
             for msg in conversation_history:
-                user_name = msg.get('user_name', 'Thorsten')
+                user_name = msg.get("user_name", "Thorsten")
                 full_prompt += f"{user_name}: {msg['content']}\n"
 
         await interaction.response.send_message(full_prompt)
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(AiCog(bot))
