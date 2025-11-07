@@ -130,10 +130,10 @@ class AiCog(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         # Hole Kontextinformationen
-        context_str = await build_ai_context(interaction.user.voice.channel)
+        # context_str = await build_ai_context(interaction.user.voice.channel)
 
         # Erstelle vollständige Prompt mit Kontext und Benutzernamen
-        full_prompt = f"Kontext: {context_str}\n\n{interaction.user.display_name} fragte: {prompt}"
+        full_prompt = f"Kontext: User wrote in a text channel.\n\n{interaction.user.display_name} fragte: {prompt}"
 
         resp = await ask_ollama(full_prompt)
         await interaction.followup.send(resp)
