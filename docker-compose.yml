@@ -3,10 +3,6 @@ services:
     build: .
     container_name: discord-bot
     restart: always
-    volumes:
-      - ./music:/music:Z
-      - ./tts:/tts:Z
-      - ./.env:/.env:Z
     env_file:
       - .env
   ollama:
@@ -22,9 +18,7 @@ services:
       - "11434:11434"
     volumes:
       # Persist Ollama data (models, cache)
-      - ./models/ollama:/root/.ollama:Z
-      # Mount Modelfile for custom model building
-      - ./models/Modelfile:/Modelfile:Z
+      - ollamadata:/root/.ollama:Z
     #deploy:
     #resources:
     #reservations:
@@ -32,3 +26,5 @@ services:
     #- driver: nvidia
     #  count: all
     #  capabilities: [gpu]
+volumes:
+  ollamadata:
