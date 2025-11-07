@@ -5,7 +5,7 @@ import os
 from collections import deque
 import datetime
 import asyncio
-from main import replace_speech_placeholders, generate_speech, play_audio, leave_voice
+from main import replace_speech_placeholders, generate_speech, play_audio, leave_voice, logging
 
 # Ollama-Konfiguration
 OLLAMA_MODEL = "thorsten"
@@ -70,7 +70,7 @@ async def ask_ollama(
         return full_response
 
     except Exception as e:
-        print(e)
+        logging.exception(e)
         return "Verdammt nochmal, jetzt funktioniert's wieder nicht! Gib mir mal 'ne Minute Zeit..."
 
 async def ai_worker():
