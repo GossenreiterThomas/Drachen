@@ -76,9 +76,10 @@ async def replace_speech_placeholders(
     text: str,
     channel: discord.VoiceChannel,
 ) -> str:
-    humans = [m for m in channel.members if not m.bot]
-    if humans:
-        text = text.replace("{name}", f"**{random.choice(humans).display_name}**")
+    if "{name}" in text:
+        humans = [m for m in channel.members if not m.bot]
+        if humans:
+            text = text.replace("{name}", f"**{random.choice(humans).display_name}**")
 
     return text
 
