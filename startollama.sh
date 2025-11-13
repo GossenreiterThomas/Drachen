@@ -13,5 +13,7 @@ else
     echo "Model 'thorsten' already exists, skipping build."
 fi
 
+ollama run thorsten "Hallo"
+
 # Keep the container alive
 wait -n

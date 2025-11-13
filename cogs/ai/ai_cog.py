@@ -3,13 +3,17 @@ import asyncio
 import datetime
 import os
 from collections import deque
-import datetime
-import asyncio
 
 import discord
 from discord.ext import commands
 
-from main import generate_speech, leave_voice, play_audio, replace_speech_placeholders, logging
+from main import (
+    generate_speech,
+    leave_voice,
+    logging,
+    play_audio,
+    replace_speech_placeholders,
+)
 
 # Ollama-Konfiguration
 OLLAMA_MODEL = "thorsten"
