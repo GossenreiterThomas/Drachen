@@ -1,14 +1,15 @@
 # main.py
 import asyncio
+import logging
+import os
 import random
 import wave
 
 import discord
 from discord.ext import commands, tasks
-import os
 from dotenv import load_dotenv
-import logging
 from piper import PiperVoice
+
 # from ollama import AsyncClient
 
 
@@ -42,8 +43,8 @@ class MyBot(commands.Bot):
         for g in self.guilds:
             print(f"- {g.id} {g.name}")
 
-bot = MyBot()
 
+bot = MyBot()
 
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -53,6 +54,8 @@ voice_model = PiperVoice.load(model_path)
 """
 UTILITY CLASSES
 """
+
+
 async def generate_speech(text: str, filename: str = "tts_output.wav") -> str:
     """
     Generate TTS audio file from given text.
@@ -61,14 +64,18 @@ async def generate_speech(text: str, filename: str = "tts_output.wav") -> str:
     audio_path = os.path.join("tts", filename)
 
     with wave.open(audio_path, "wb") as wav_file:
-        wav_file.setnchannels(1)      # mono
-        wav_file.setsampwidth(2)      # 16-bit
+        wav_file.setnchannels(1)  # mono
+        wav_file.setsampwidth(2)  # 16-bit
         wav_file.setframerate(22050)  # sample rate
         voice_model.synthesize_wav(text, wav_file)
 
     return audio_path
 
-async def replace_speech_placeholders(text: str, channel: discord.VoiceChannel,) -> str:
+
+async def replace_speech_placeholders(
+    text: str,
+    channel: discord.VoiceChannel,
+) -> str:
     humans = [m for m in channel.members if not m.bot]
     if humans:
         text = text.replace("{name}", f"**{random.choice(humans).display_name}**")
@@ -84,6 +91,7 @@ def play_audio(vc, audio_path):
     else:
         print("Not connected to a voice channel.")
 
+
 async def leave_voice(vc):
     if vc.is_playing() or vc.is_paused():
         vc.stop()
@@ -92,7 +100,6 @@ async def leave_voice(vc):
     global conversationStarted
     conversationStarted = False
     await vc.disconnect(force=True)
-
 
 
 @tasks.loop(minutes=5)
@@ -106,20 +113,21 @@ async def keep_alive_ping():
         print(f"💓 Keep-alive ping for guild: {guild.name} ({guild.id})")
 
 
-
 @bot.event
 async def on_disconnect():
     print("⚠️ Bot disconnected from Discord!")
+
 
 @bot.event
 async def on_resumed():
     print("✅ Bot reconnected to Discord!")
 
 
-
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user}")
+    print("Opus loaded:", discord.opus.is_loaded())
+
     # start the loops
     if not keep_alive_ping.is_running():
         keep_alive_ping.start()

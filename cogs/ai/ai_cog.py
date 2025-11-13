@@ -1,7 +1,7 @@
 # cogs/ask_cog.py
 import asyncio
 import datetime
-import os
+import threading
 from collections import deque
 
 import discord
@@ -60,23 +60,30 @@ async def ask_ollama(prompt: str, max_history: int = 50) -> str:
 
         # Antwort
         buffer = ""
+        sentence = ""
 
         for chunk in client.generate(
             model=OLLAMA_MODEL, prompt=full_prompt, stream=True
         ):
-            try:
-                text = chunk["message"]["content"]
-            except KeyError:
-                # If chunk format differs, skip or inspect:
-                continue
-
-            if text is None:
-                continue
+            text = chunk.response
+            sentence += text
+            if (
+                sentence.count(".") >= 1
+                or sentence.count("!") >= 1
+                or sentence.count("?") >= 1
+            ):
+                print("new sentence")
+                print(sentence)
+                thread = threading.Thread(
+                    target=send_user_message, args=(job, sentence), daemon=True
+                )
+                thread.start()
+                sentence = ""
 
             buffer += text
 
         full_response = buffer
-        print(full_response)
+        print("full res:", full_response)
 
         # Aktualisiere die Konversationshistorie
         conversation_history.append({"role": "assistant", "content": full_response})
@@ -100,10 +107,12 @@ async def ai_worker():
         prompt = job["prompt"]
         result = await ask_ollama(prompt)
 
-        await send_user_message(job, result)
+        # when only sending full message
+        # await send_user_message(job, result)
 
 
 async def send_user_message(job, result):
+    return
     try:
         if job.get("respond_channel"):
             await job["respond_channel"].send(result)
