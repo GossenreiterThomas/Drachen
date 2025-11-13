@@ -74,10 +74,7 @@ async def ask_ollama(prompt: str, max_history: int = 50) -> str:
             ):
                 print("new sentence")
                 print(sentence)
-                thread = threading.Thread(
-                    target=send_user_message, args=(job, sentence), daemon=True
-                )
-                thread.start()
+                response_queue.append(sentence)
                 sentence = ""
 
             buffer += text
