@@ -143,8 +143,6 @@ async def ai_response_queue_tts(channel: discord.VoiceChannel):
             if len(response_queue) > 0:
                 response_queue.pop(0)
 
-            await asyncio.sleep(2)
-
         currently_speaking = False
         await leave_voice(vc)
 
@@ -190,7 +188,6 @@ class AiCog(commands.Cog):
 
         # Ersetze Platzhalter und füge zur Warteschlange hinzu
         text = await replace_speech_placeholders(resp, channel)
-        response_queue.append(text)
 
         await interaction.followup.send(
             "Antwort generiert und zur Wiedergabeliste hinzugefügt", ephemeral=True
