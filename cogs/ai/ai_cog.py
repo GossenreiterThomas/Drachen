@@ -58,9 +58,24 @@ async def ask_ollama(prompt: str, max_history: int = 50) -> str:
                 user_name = msg.get("user_name", "Thorsten")
                 full_prompt += f"{user_name}: {msg['content']}\n"
 
-        # Einzelne Antwort
-        message = client.generate(model=OLLAMA_MODEL, prompt=full_prompt, stream=False)
-        full_response = message["response"]
+        # Antwort
+        buffer = ""
+
+        for chunk in client.generate(
+            model=OLLAMA_MODEL, prompt=full_prompt, stream=True
+        ):
+            try:
+                text = chunk["message"]["content"]
+            except KeyError:
+                # If chunk format differs, skip or inspect:
+                continue
+
+            if text is None:
+                continue
+
+            buffer += text
+
+        full_response = buffer
         print(full_response)
 
         # Aktualisiere die Konversationshistorie
@@ -85,15 +100,19 @@ async def ai_worker():
         prompt = job["prompt"]
         result = await ask_ollama(prompt)
 
-        try:
-            if job.get("respond_channel"):
-                await job["respond_channel"].send(result)
-            elif job.get("respond_interaction"):
-                await job["respond_interaction"].followup.send(result)
-            elif job.get("respond_user"):
-                await job["respond_user"].send(result)
-        except Exception as e:
-            print(f"Fehler beim Senden der KI-Antwort: {e}")
+        await send_user_message(job, result)
+
+
+async def send_user_message(job, result):
+    try:
+        if job.get("respond_channel"):
+            await job["respond_channel"].send(result)
+        elif job.get("respond_interaction"):
+            await job["respond_interaction"].followup.send(result)
+        elif job.get("respond_user"):
+            await job["respond_user"].send(result)
+    except Exception as e:
+        print(f"Fehler beim Senden der KI-Antwort: {e}")
 
 
 async def ai_response_queue_tts(channel: discord.VoiceChannel):
