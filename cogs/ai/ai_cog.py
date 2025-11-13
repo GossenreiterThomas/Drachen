@@ -75,7 +75,7 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
                 print("new sentence")
                 print(sentence)
 
-                threading.Thread(target=add_sentense_to_queue, args=(sentence, interaction)).start()
+                threading.Thread(target=add_sentence_to_queue, args=(sentence, interaction)).start()
 
                 sentence = ""
 
@@ -95,7 +95,7 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
         logging.exception(e)
         return "Verdammt nochmal, jetzt funktioniert's wieder nicht! Gib mir mal 'ne Minute Zeit..."
 
-async def add_sentense_to_queue(sentence: str, interaction):
+async def add_sentence_to_queue(sentence: str, interaction):
     fixed_str = await replace_speech_placeholders(sentence, interaction.user.voice.channel)
     response_queue.append(fixed_str)
 
@@ -202,6 +202,9 @@ class AiCog(commands.Cog):
 
         # Verarbeite die TTS-Warteschlange
         await ai_response_queue_tts(channel)
+
+        await interaction.followup.send(text)
+
 
     # Neue Methode zum Speichern der Nachrichten mit Benutzernamen
     async def save_message(self, user: discord.Member, content: str):
