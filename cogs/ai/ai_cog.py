@@ -41,7 +41,7 @@ async def build_ai_context(channel: discord.VoiceChannel) -> str:
     return context
 
 
-async def ask_ollama(prompt: str, max_history: int = 50) -> str:
+async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
     """Sendet eine Anfrage an das lokale Ollama-Model und gibt die Antwort zurück."""
     import ollama
 
@@ -74,7 +74,9 @@ async def ask_ollama(prompt: str, max_history: int = 50) -> str:
             ):
                 print("new sentence")
                 print(sentence)
-                response_queue.append(sentence)
+
+                threading.Thread(target=add_sentense_to_queue, args=(sentence, interaction)).start()
+
                 sentence = ""
 
             buffer += text
@@ -93,8 +95,13 @@ async def ask_ollama(prompt: str, max_history: int = 50) -> str:
         logging.exception(e)
         return "Verdammt nochmal, jetzt funktioniert's wieder nicht! Gib mir mal 'ne Minute Zeit..."
 
+async def add_sentense_to_queue(sentence: str, interaction):
+    fixed_str = await replace_speech_placeholders(sentence, interaction.user.voice.channel)
+    response_queue.append(fixed_str)
+
 
 async def ai_worker():
+    print("--------what even is this?.........")
     while True:
         if not ai_queue:
             await asyncio.sleep(0.5)
@@ -102,7 +109,7 @@ async def ai_worker():
 
         job = ai_queue.popleft()
         prompt = job["prompt"]
-        result = await ask_ollama(prompt)
+        #result = await ask_ollama(prompt)
 
         # when only sending full message
         # await send_user_message(job, result)
@@ -163,7 +170,7 @@ class AiCog(commands.Cog):
         # Erstelle vollständige Prompt mit Kontext und Benutzernamen
         full_prompt = f"Kontext: User wrote in a text channel.\n\n{interaction.user.display_name} fragte: {prompt}"
 
-        resp = await ask_ollama(full_prompt)
+        resp = await ask_ollama(interaction, full_prompt)
         await interaction.followup.send(resp)
 
     @discord.app_commands.command(name="ask", description="Frage Thorsten etwas.")
@@ -184,7 +191,7 @@ class AiCog(commands.Cog):
         await self.save_message(interaction.user, prompt)
 
         # Frage KI-Model
-        resp = await ask_ollama(full_prompt)
+        resp = await ask_ollama(interaction, full_prompt)
 
         # Ersetze Platzhalter und füge zur Warteschlange hinzu
         text = await replace_speech_placeholders(resp, channel)
