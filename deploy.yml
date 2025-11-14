@@ -9,6 +9,21 @@ spec:
     requests:
       storage: 5Gi
 ---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-discord-voice
+spec:
+  podSelector:
+    matchLabels:
+      app: thorsten-der-drache
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
