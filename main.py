@@ -60,6 +60,7 @@ async def generate_speech(text: str, filename: str = "tts_output.wav") -> str:
     Generate TTS audio file from given text.
     Returns the path to the generated audio.
     """
+    os.makedirs("tts", exist_ok=True)
     audio_path = os.path.join("tts", filename)
 
     with wave.open(audio_path, "wb") as wav_file:
