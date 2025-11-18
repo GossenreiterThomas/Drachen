@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libopus-dev \
     libsodium23 \
     libsodium-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python dependencies
