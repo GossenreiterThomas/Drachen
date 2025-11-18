@@ -9,34 +9,19 @@ spec:
     requests:
       storage: 5Gi
 ---
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: allow-discord-voice
-spec:
-  podSelector:
-    matchLabels:
-      app: thorsten-der-drache
-  policyTypes:
-    - Egress
-  egress:
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: thorsten-dc-bot
+  name: thorsten-ollama
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: thorsten-der-drache
+      app: thorsten-ollama
   template:
     metadata:
       labels:
-        app: thorsten-der-drache
+        app: thorsten-ollama
     spec:
       restartPolicy: Always
       volumes:
@@ -44,11 +29,6 @@ spec:
           persistentVolumeClaim:
             claimName: thorsten-ollama-pvc
       containers:
-        - name: discord-bot
-          image: ghcr.io/gossenreiterthomas/thorsten-bot:latest
-          envFrom:
-            - configMapRef:
-                name: thorsten-env
         - name: ollama
           image: ghcr.io/gossenreiterthomas/thorsten-ollama:latest
           ports:

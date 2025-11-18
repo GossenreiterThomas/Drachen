@@ -1,0 +1,32 @@
+services:
+  discord-bot:
+    #build: .
+    image: ghcr.io/gossenreiterthomas/thorsten-bot:latest
+    container_name: discord-bot
+    restart: always
+    env_file:
+      - .env
+  ollama:
+    #image: ollama/ollama:latest
+    #build:
+    #  context: .
+    #  dockerfile: Dockerfile_ollama
+    #  args:
+    #    MODEL_FILE: Dockerfile_ollama
+    image: ghcr.io/gossenreiterthomas/thorsten-ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      # Persist Ollama data (models, cache)
+      - ollamadata:/root/.ollama:Z
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+volumes:
+  ollamadata:

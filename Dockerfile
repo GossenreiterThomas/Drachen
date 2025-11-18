@@ -5,10 +5,12 @@ FROM python:3.11-slim
 # WORKDIR /app
 
 # Install system dependencies (FFmpeg for audio playback)
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libopus0 \
     libopus-dev \
+    libsodium23 \
+    libsodium-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python dependencies

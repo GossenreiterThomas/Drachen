@@ -114,7 +114,6 @@ async def ai_worker():
         # when only sending full message
         # await send_user_message(job, result)
 
-
 async def send_user_message(job, result):
     return
     try:

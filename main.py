@@ -52,12 +52,6 @@ model_path = os.path.join(BASE_DIR, "de_DE-thorsten-medium.onnx")
 voice_model = PiperVoice.load(model_path)
 
 """
-school server fix?
-"""
-from discord import VoiceClient
-
-VoiceClient.supported_modes = ["udp"]
-"""
 UTILITY CLASSES
 """
 
