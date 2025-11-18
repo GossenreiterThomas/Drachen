@@ -1,0 +1,1 @@
+kubectl port-forward deployment/thorsten-ollama 11434:11434

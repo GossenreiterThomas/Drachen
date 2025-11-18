@@ -55,7 +55,6 @@ voice_model = PiperVoice.load(model_path)
 UTILITY CLASSES
 """
 
-
 async def generate_speech(text: str, filename: str = "tts_output.wav") -> str:
     """
     Generate TTS audio file from given text.
