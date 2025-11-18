@@ -3,5 +3,6 @@ services:
     image: ghcr.io/gossenreiterthomas/thorsten-bot:latest
     container_name: discord-bot
     restart: always
+    network_mode: host
     env_file:
       - .env
