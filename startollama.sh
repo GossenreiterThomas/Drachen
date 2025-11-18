@@ -1,9 +1,15 @@
 #!/bin/bash
-# Start Ollama server
+set -e
+
+# Start Ollama server (foreground)
 ollama serve &
 
-# Wait a few seconds for it to be ready
-sleep 5
+# Wait for Ollama to be ready
+echo "Waiting for Ollama to start..."
+until curl -s http://localhost:11434/api/tags >/dev/null; do
+    sleep 1
+done
+echo "Ollama is ready."
 
 # Create the model if it doesn't exist
 if ! ollama show thorsten >/dev/null 2>&1; then
@@ -13,7 +19,8 @@ else
     echo "Model 'thorsten' already exists, skipping build."
 fi
 
-ollama run thorsten "Hallo"
+# Optional test run (non-blocking)
+ollama run thorsten "Hallo" || true
 
-# Keep the container alive
-wait -n
+# Keep the Ollama server alive in the foreground
+fg %1
