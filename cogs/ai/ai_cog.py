@@ -65,16 +65,20 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
         for chunk in client.generate(
             model=OLLAMA_MODEL, prompt=full_prompt, stream=True
         ):
-            print(chunk.response)
-            text = chunk.response
-            sentence += text
-            if (
-                sentence.count(".") >= 1
-                or sentence.count("!") >= 1
-                or sentence.count("?") >= 1
-            ):
-                print("new sentence")
-                print(sentence)
+            try:
+                print(chunk.response)
+                text = chunk.response
+                sentence += text
+                if (
+                    sentence.count(".") >= 1
+                    or sentence.count("!") >= 1
+                    or sentence.count("?") >= 1
+                ):
+                    print("new sentence")
+                    print(sentence)
+            except Exception as e:
+                print(f"Error: {e}")
+                continue
 
             #    interaction.followup.send(sentence, ephemeral=True)
 
