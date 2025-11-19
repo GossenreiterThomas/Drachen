@@ -76,13 +76,13 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
                 print("new sentence")
                 print(sentence)
 
-                interaction.followup.send(sentence, ephemeral=True)
+            #    interaction.followup.send(sentence, ephemeral=True)
 
-                threading.Thread(target=add_sentence_to_queue, args=(sentence, interaction)).start()
+            #    threading.Thread(target=add_sentence_to_queue, args=(sentence, interaction)).start()
 
-                sentence = ""
+            #    sentence = ""
 
-            buffer += text
+            #buffer += text
 
         full_response = buffer
         print("full res:", full_response)
