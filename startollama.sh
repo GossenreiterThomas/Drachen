@@ -1,8 +1,11 @@
 #!/bin/bash
 set -e
 
-# Start Ollama server (foreground)
+# Start Ollama server in background
 ollama serve &
+
+# Remember PID so we can wait for it later
+OLLAMA_PID=$!
 
 # Wait for Ollama to be ready
 echo "Waiting for Ollama to start..."
@@ -22,5 +25,5 @@ fi
 # Optional test run (non-blocking)
 ollama run thorsten "Hallo" || true
 
-# Keep the Ollama server alive in the foreground
-fg %1
+# Keep container alive by waiting for the Ollama server
+wait $OLLAMA_PID

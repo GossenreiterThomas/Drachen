@@ -7,7 +7,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 5Gi
+      storage: 15Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -31,5 +31,22 @@ spec:
       containers:
         - name: ollama
           image: ghcr.io/gossenreiterthomas/thorsten-ollama:latest
+          volumeMounts:
+            - name: thorsten-ollama-data
+              mountPath: /root/.ollama
           ports:
             - containerPort: 11434
+          resources:
+            requests:
+              memory: "8Gi"
+              cpu: "4"
+            limits:
+              memory: "20Gi"
+              cpu: "8"
+          readinessProbe:
+            httpGet:
+              path: /api/tags
+              port: 11434
+            initialDelaySeconds: 120   # wait 2 minutes before first probe
+            periodSeconds: 10
+            failureThreshold: 6
