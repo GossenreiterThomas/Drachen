@@ -65,6 +65,7 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
         for chunk in client.generate(
             model=OLLAMA_MODEL, prompt=full_prompt, stream=True
         ):
+            print(chunk.response)
             text = chunk.response
             sentence += text
             if (
