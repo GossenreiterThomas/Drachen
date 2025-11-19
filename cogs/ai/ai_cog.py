@@ -47,7 +47,7 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
 
     try:
         # Initialisiere den Ollama-Client
-        client = ollama.Client(host="http://localhost:11434")
+        client = ollama.Client(host="http://host.docker.internal:11434")
 
         # Erstelle die vollständige Prompt-Nachricht
         full_prompt = f"Kontext: {prompt}\n"
