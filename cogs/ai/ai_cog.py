@@ -75,6 +75,8 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
                 print("new sentence")
                 print(sentence)
 
+                interaction.followup.send(sentence, ephemeral=True)
+
                 threading.Thread(target=add_sentence_to_queue, args=(sentence, interaction)).start()
 
                 sentence = ""
@@ -96,7 +98,6 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
         return "Verdammt nochmal, jetzt funktioniert's wieder nicht! Gib mir mal 'ne Minute Zeit..."
 
 async def add_sentence_to_queue(sentence: str, interaction):
-    interaction.followup.send(sentence, ephemeral=True)
     fixed_str = await replace_speech_placeholders(sentence, interaction.user.voice.channel)
     response_queue.append(fixed_str)
 
