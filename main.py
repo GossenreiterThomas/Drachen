@@ -12,6 +12,8 @@ from piper import PiperVoice
 
 # from ollama import AsyncClient
 
+#loads opus on macos
+discord.opus.load_opus('/opt/homebrew/lib/libopus.dylib')
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")

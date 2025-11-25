@@ -46,8 +46,10 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
     import ollama
 
     try:
+        print("Ai wird gefragt:")
         # Initialisiere den Ollama-Client
-        client = ollama.Client(host="http://host.docker.internal:11434")
+        #client = ollama.Client(host="http://host.docker.internal:11434")
+        client = ollama.AsyncClient(host="http://localhost:11434")
 
         # Erstelle die vollständige Prompt-Nachricht
         full_prompt = f"Kontext: {prompt}\n"
@@ -62,9 +64,14 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
         buffer = ""
         sentence = ""
 
-        for chunk in client.generate(
+        stream = await client.generate(
             model=OLLAMA_MODEL, prompt=full_prompt, stream=True
-        ):
+        )
+
+        channel = interaction.user.voice.channel
+        vc = await channel.connect()
+
+        async for chunk in stream:
             try:
                 print(chunk.response)
                 text = chunk.response
@@ -76,27 +83,26 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
                 ):
                     print("new sentence")
                     print(sentence)
+                    await add_sentence_to_queue(sentence, interaction)
+                    await interaction.followup.send(sentence, ephemeral=True)
+
+                    await ai_response_queue_tts(vc)
+
+                    sentence = ""
+                    buffer += text
             except Exception as e:
                 print(f"Error: {e}")
                 continue
-
-            #    interaction.followup.send(sentence, ephemeral=True)
-
-            #    threading.Thread(target=add_sentence_to_queue, args=(sentence, interaction)).start()
-
-            #    sentence = ""
-
-            #buffer += text
-
         full_response = buffer
         print("full res:", full_response)
+        ##full response isnt used anymore
 
         # Aktualisiere die Konversationshistorie
         conversation_history.append({"role": "assistant", "content": full_response})
         if len(conversation_history) > max_history:
             conversation_history[:] = conversation_history[-max_history:]
 
-        return full_response
+        return vc
 
     except Exception as e:
         logging.exception(e)
@@ -134,15 +140,15 @@ async def send_user_message(job, result):
         print(f"Fehler beim Senden der KI-Antwort: {e}")
 
 
-async def ai_response_queue_tts(channel: discord.VoiceChannel):
+async def ai_response_queue_tts(vc):
     global currently_speaking
     if not currently_speaking:
         currently_speaking = True
-        vc = await channel.connect()
+        #vc = await channel.connect()
 
         while len(response_queue) > 0:
-            if not vc.is_connected():
-                vc = await channel.connect()
+            #if not vc.is_connected():
+            #    vc = await channel.connect()
 
             text = response_queue[0]
             audio_path = await generate_speech(text)
@@ -157,7 +163,7 @@ async def ai_response_queue_tts(channel: discord.VoiceChannel):
                 response_queue.pop(0)
 
         currently_speaking = False
-        await leave_voice(vc)
+        #await leave_voice(vc) moved to ask ai function
 
 
 class AiCog(commands.Cog):
@@ -197,19 +203,24 @@ class AiCog(commands.Cog):
         await self.save_message(interaction.user, prompt)
 
         # Frage KI-Model
-        resp = await ask_ollama(interaction, full_prompt)
+        vc = await ask_ollama(interaction, full_prompt)
 
         # Ersetze Platzhalter und füge zur Warteschlange hinzu
-        text = await replace_speech_placeholders(resp, channel)
+        #text = await replace_speech_placeholders(resp, channel)
 
         await interaction.followup.send(
             "Antwort generiert und zur Wiedergabeliste hinzugefügt", ephemeral=True
         )
 
         # Verarbeite die TTS-Warteschlange
-        await ai_response_queue_tts(channel)
+        #await ai_response_queue_tts(channel)
 
-        await interaction.followup.send(text)
+        #await interaction.followup.send(text)
+
+        while vc.is_playing():
+            await asyncio.sleep(0.5)
+
+        await leave_voice(vc)
 
 
     # Neue Methode zum Speichern der Nachrichten mit Benutzernamen
