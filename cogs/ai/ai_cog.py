@@ -41,7 +41,7 @@ async def build_ai_context(channel: discord.VoiceChannel) -> str:
     return context
 
 
-async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
+async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> discord.voice_client.VoiceClient:
     """Sendet eine Anfrage an das lokale Ollama-Model und gibt die Antwort zurück."""
     import ollama
 
@@ -70,6 +70,7 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
 
         channel = interaction.user.voice.channel
         vc = await channel.connect()
+        print(type(vc))
 
         async for chunk in stream:
             try:
@@ -112,39 +113,10 @@ async def add_sentence_to_queue(sentence: str, interaction):
     fixed_str = await replace_speech_placeholders(sentence, interaction.user.voice.channel)
     response_queue.append(fixed_str)
 
-
-async def ai_worker():
-    print("--------what even is this?.........")
-    while True:
-        if not ai_queue:
-            await asyncio.sleep(0.5)
-            continue
-
-        job = ai_queue.popleft()
-        prompt = job["prompt"]
-        #result = await ask_ollama(prompt)
-
-        # when only sending full message
-        # await send_user_message(job, result)
-
-async def send_user_message(job, result):
-    return
-    try:
-        if job.get("respond_channel"):
-            await job["respond_channel"].send(result)
-        elif job.get("respond_interaction"):
-            await job["respond_interaction"].followup.send(result)
-        elif job.get("respond_user"):
-            await job["respond_user"].send(result)
-    except Exception as e:
-        print(f"Fehler beim Senden der KI-Antwort: {e}")
-
-
 async def ai_response_queue_tts(vc):
     global currently_speaking
     if not currently_speaking:
         currently_speaking = True
-        #vc = await channel.connect()
 
         while len(response_queue) > 0:
             #if not vc.is_connected():
@@ -176,7 +148,7 @@ class AiCog(commands.Cog):
     async def askchat(self, interaction: discord.Interaction, prompt: str):
         await interaction.response.defer(ephemeral=True)
 
-        # Hole Kontextinformationen
+        # Hole KEINE !!!!! Kontextinformationen
         # context_str = await build_ai_context(interaction.user.voice.channel)
 
         # Erstelle vollständige Prompt mit Kontext und Benutzernamen
@@ -205,20 +177,24 @@ class AiCog(commands.Cog):
         # Frage KI-Model
         vc = await ask_ollama(interaction, full_prompt)
 
+        if type(vc) == str:
+            print(vc)
+            await interaction.followup.send(vc, ephemeral=True)
+            return
+
         # Ersetze Platzhalter und füge zur Warteschlange hinzu
-        #text = await replace_speech_placeholders(resp, channel)
+        #text = await replace_speech_placeholders(resp, channel) MOVED TO add_sentence_to_queue
 
         await interaction.followup.send(
             "Antwort generiert und zur Wiedergabeliste hinzugefügt", ephemeral=True
         )
 
         # Verarbeite die TTS-Warteschlange
-        #await ai_response_queue_tts(channel)
-
+        #await ai_response_queue_tts(channel) MOVED TO ask_ollama
         #await interaction.followup.send(text)
 
         while vc.is_playing():
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(5)
 
         await leave_voice(vc)
 

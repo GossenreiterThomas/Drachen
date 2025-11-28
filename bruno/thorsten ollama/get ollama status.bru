@@ -1,0 +1,19 @@
+meta {
+  name: get ollama status
+  type: http
+  seq: 1
+}
+
+get {
+  url: https://it210195.cloud.htl-leonding.ac.at/api/tags
+  body: none
+  auth: inherit
+}
+
+headers {
+  X-API-Key: {{api_token}}
+}
+
+settings {
+  encodeUrl: true
+}

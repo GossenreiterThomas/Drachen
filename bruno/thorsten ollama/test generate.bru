@@ -1,0 +1,28 @@
+meta {
+  name: test generate
+  type: http
+  seq: 2
+}
+
+post {
+  url: https://it210195.cloud.htl-leonding.ac.at/api/generate
+  body: json
+  auth: inherit
+}
+
+headers {
+  X-API-Key: {{api_token}}
+}
+
+body:json {
+  {
+    "model": "thorsten",
+    "prompt": "guten morgen thorsten",
+    "stream": false
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
