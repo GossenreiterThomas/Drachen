@@ -2,6 +2,7 @@
 import asyncio
 import logging
 import os
+import platform
 import random
 import wave
 
@@ -10,10 +11,9 @@ from discord.ext import commands, tasks
 from dotenv import load_dotenv
 from piper import PiperVoice
 
-# from ollama import AsyncClient
-
 #loads opus on macos
-discord.opus.load_opus('/opt/homebrew/lib/libopus.dylib')
+if platform.system() == "Darwin":
+    discord.opus.load_opus('/opt/homebrew/lib/libopus.dylib')
 
 load_dotenv()
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
@@ -24,7 +24,6 @@ intents = discord.Intents.all()
 
 # enable debug logging to see what discord.py is doing
 logging.basicConfig(level=logging.INFO)
-
 
 class MyBot(commands.Bot):
     def __init__(self):
@@ -39,6 +38,10 @@ class MyBot(commands.Bot):
         guild = discord.Object(id=TEST_GUILD_ID)
         self.tree.copy_global_to(guild=guild)
         await self.tree.sync(guild=guild)
+
+        # Starts Brain
+        from brain.brain import think_loop
+        self.loop.create_task(think_loop())
 
     async def on_ready(self):
         print(f"Logged in as {self.user} — connected to {len(self.guilds)} guild(s)")

@@ -5,7 +5,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy your custom modelfile
-COPY ./models/Modelfile /Modelfile
+COPY models/Modelfile /Modelfile
 
 # Copy startup script
 COPY ./startollama.sh /start.sh

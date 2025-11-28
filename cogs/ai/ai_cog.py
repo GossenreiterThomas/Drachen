@@ -15,6 +15,8 @@ from main import (
     replace_speech_placeholders,
 )
 
+from brain import brain
+
 # Ollama-Konfiguration
 OLLAMA_MODEL = "thorsten"
 ai_queue = deque()
@@ -22,7 +24,6 @@ conversation_history: list[dict] = []
 
 response_queue = []
 currently_speaking = False
-
 
 async def build_ai_context(channel: discord.VoiceChannel) -> str:
     """Erstellt den Kontext für das Ollama-Model basierend auf dem Voice Channel."""
@@ -41,7 +42,7 @@ async def build_ai_context(channel: discord.VoiceChannel) -> str:
     return context
 
 
-async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> discord.voice_client.VoiceClient:
+async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
     """Sendet eine Anfrage an das lokale Ollama-Model und gibt die Antwort zurück."""
     import ollama
 
@@ -49,7 +50,7 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> discord
         print("Ai wird gefragt:")
         # Initialisiere den Ollama-Client
         #client = ollama.Client(host="http://host.docker.internal:11434")
-        client = ollama.AsyncClient(host="http://localhost:11434")
+        client = ollama.AsyncClient(host="https://it210195.cloud.htl-leonding.ac.at")
 
         # Erstelle die vollständige Prompt-Nachricht
         full_prompt = f"Kontext: {prompt}\n"
@@ -68,9 +69,10 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> discord
             model=OLLAMA_MODEL, prompt=full_prompt, stream=True
         )
 
-        channel = interaction.user.voice.channel
-        vc = await channel.connect()
-        print(type(vc))
+        if interaction.user.voice is not None: ##if user is in a voice channel
+            channel = interaction.user.voice.channel
+            #vc = await channel.connect()# in brain
+            #print(type(vc))
 
         async for chunk in stream:
             try:
@@ -84,10 +86,16 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> discord
                 ):
                     print("new sentence")
                     print(sentence)
-                    await add_sentence_to_queue(sentence, interaction)
+                    ##Text Channel
                     await interaction.followup.send(sentence, ephemeral=True)
 
-                    await ai_response_queue_tts(vc)
+                    ##Voice Channel
+                    #if interaction.user.voice is not None:  ##if user is in a voice channel
+                    #    await add_sentence_to_queue(sentence, interaction)
+                    #    await ai_response_queue_tts(vc)
+
+                    ##Brain(WIP)
+                    brain.add_text_to_queue(sentence, interaction)
 
                     sentence = ""
                     buffer += text
@@ -96,14 +104,14 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> discord
                 continue
         full_response = buffer
         print("full res:", full_response)
-        ##full response isnt used anymore
 
         # Aktualisiere die Konversationshistorie
         conversation_history.append({"role": "assistant", "content": full_response})
         if len(conversation_history) > max_history:
             conversation_history[:] = conversation_history[-max_history:]
 
-        return vc
+        if interaction.user.voice is None:  ##if user is in a voice channel
+            return full_response
 
     except Exception as e:
         logging.exception(e)
@@ -155,7 +163,6 @@ class AiCog(commands.Cog):
         full_prompt = f"Kontext: User wrote in a text channel.\n\n{interaction.user.display_name} fragte: {prompt}"
 
         resp = await ask_ollama(interaction, full_prompt)
-        await interaction.followup.send(resp)
 
     @discord.app_commands.command(name="ask", description="Frage Thorsten etwas.")
     async def askai(self, interaction: discord.Interaction, prompt: str):
@@ -175,28 +182,24 @@ class AiCog(commands.Cog):
         await self.save_message(interaction.user, prompt)
 
         # Frage KI-Model
-        vc = await ask_ollama(interaction, full_prompt)
+        resp = await ask_ollama(interaction, full_prompt)
 
-        if type(vc) == str:
-            print(vc)
-            await interaction.followup.send(vc, ephemeral=True)
+        if type(resp) == str:
+            print(resp)
+            await interaction.followup.send(resp, ephemeral=True)
             return
 
         # Ersetze Platzhalter und füge zur Warteschlange hinzu
         #text = await replace_speech_placeholders(resp, channel) MOVED TO add_sentence_to_queue
 
-        await interaction.followup.send(
-            "Antwort generiert und zur Wiedergabeliste hinzugefügt", ephemeral=True
-        )
-
         # Verarbeite die TTS-Warteschlange
         #await ai_response_queue_tts(channel) MOVED TO ask_ollama
         #await interaction.followup.send(text)
 
-        while vc.is_playing():
-            await asyncio.sleep(5)
+        #while vc.is_playing():
+        #    await asyncio.sleep(5)
 
-        await leave_voice(vc)
+        #await leave_voice(vc) #in brain
 
 
     # Neue Methode zum Speichern der Nachrichten mit Benutzernamen

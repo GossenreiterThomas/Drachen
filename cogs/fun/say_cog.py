@@ -2,6 +2,9 @@
 import discord
 from discord.ext import commands
 import asyncio
+
+from brain import brain
+
 from main import generate_speech, replace_speech_placeholders, play_audio, leave_voice  # import helpers
 
 class SayCog(commands.Cog):
@@ -22,23 +25,10 @@ class SayCog(commands.Cog):
             await interaction.response.send_message("⚠️ You must be in a voice channel!", ephemeral=True)
             return
 
-        channel = interaction.user.voice.channel
-        try:
-            vc = await channel.connect()
-        except discord.ClientException:
-            vc = discord.utils.get(self.bot.voice_clients, guild=interaction.guild)
-
-        text = await replace_speech_placeholders(text, channel)
-        audio_path = await generate_speech(text)
-        play_audio(vc, audio_path)
+        brain.add_text_to_queue(text, interaction)
 
         # Send confirmation
         await interaction.response.send_message(f"🗣️ Generated speech for: *{text}*", ephemeral=True)
-
-        while vc.is_playing():
-            await asyncio.sleep(0.5)
-
-        await leave_voice(vc)
 
 
 async def setup(bot: commands.Bot):
