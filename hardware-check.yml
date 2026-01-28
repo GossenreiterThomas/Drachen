@@ -1,0 +1,53 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: hardware-check
+spec:
+  template:
+    metadata:
+      name: hardware-check
+    spec:
+      containers:
+      - name: hardware-check
+        image: nvidia/cuda:12.0.1-base-ubuntu22.04
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            echo "--- UPDATING TOOLS ---"
+            apt-get update -qq && apt-get install -y -qq pciutils clinfo &> /dev/null
+            
+            echo "--- CPU INFO ---"
+            lscpu | grep -E "Model name|CPU\(s\):|Thread\(s\) per core|Core\(s\) per socket"
+            
+            echo -e "\n--- MEMORY INFO ---"
+            free -h
+            
+            echo -e "\n--- PCI GPU SEARCH (Hardware Level) ---"
+            # This looks for any VGA or 3D controller (NVIDIA, AMD, Intel, etc.)
+            lspci | grep -iE "vga|3d|display" || echo "No PCI GPU devices found."
+            
+            echo -e "\n--- GPU INFO (NVIDIA) ---"
+            if command -v nvidia-smi &> /dev/null; then
+              nvidia-smi
+            else
+              echo "nvidia-smi not found."
+            fi
+
+            echo -e "\n--- DRIVER DIAGNOSTICS ---"
+            echo "Checking for NVIDIA kernel modules..."
+            lsmod | grep -i nvidia || echo "No NVIDIA kernel modules loaded in the kernel."
+            
+            echo -e "\nChecking for NVIDIA device nodes..."
+            ls /dev/nvidia* 2>/dev/null || echo "No /dev/nvidia device nodes found (Check NVIDIA Container Toolkit)."
+
+            echo -e "\n--- GPU INFO (AMD/OpenCL) ---"
+            if command -v clinfo &> /dev/null; then
+              clinfo | grep -E "Platform Name|Device Name|Number of devices" || echo "No OpenCL devices found."
+            else
+              echo "clinfo not found."
+            fi
+            
+            echo -e "\n--- ENVIRONMENT ---"
+            env | grep -E "CUDA|NVIDIA|ROCM|AMD"
+      restartPolicy: Never
+  backoffLimit: 1

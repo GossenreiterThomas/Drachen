@@ -49,8 +49,8 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
     try:
         print("Ai wird gefragt:")
         # Initialisiere den Ollama-Client
-        #client = ollama.Client(host="http://host.docker.internal:11434")
-        client = ollama.AsyncClient(host="https://it210195.cloud.htl-leonding.ac.at")
+        # client = ollama.AsyncClient(host="https://it210195.cloud.htl-leonding.ac.at")
+        client = ollama.AsyncClient(host="https://it210195.cloud.htl-leonding.ac.at/ollama")
 
         # Erstelle die vollständige Prompt-Nachricht
         full_prompt = f"Kontext: {prompt}\n"
@@ -149,6 +149,7 @@ async def ai_response_queue_tts(vc):
 class AiCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
+        self.ai_lock = asyncio.Lock()
 
     @discord.app_commands.command(
         name="askchat", description="Frage Thorsten etwas im Chat."
@@ -156,13 +157,14 @@ class AiCog(commands.Cog):
     async def askchat(self, interaction: discord.Interaction, prompt: str):
         await interaction.response.defer(ephemeral=True)
 
-        # Hole KEINE !!!!! Kontextinformationen
-        # context_str = await build_ai_context(interaction.user.voice.channel)
+        async with self.ai_lock:
+            # Hole KEINE !!!!! Kontextinformationen
+            # context_str = await build_ai_context(interaction.user.voice.channel)
 
-        # Erstelle vollständige Prompt mit Kontext und Benutzernamen
-        full_prompt = f"Kontext: User wrote in a text channel.\n\n{interaction.user.display_name} fragte: {prompt}"
+            # Erstelle vollständige Prompt mit Kontext und Benutzernamen
+            full_prompt = f"Kontext: User wrote in a text channel.\n\n{interaction.user.display_name} fragte: {prompt}"
 
-        resp = await ask_ollama(interaction, full_prompt)
+            resp = await ask_ollama(interaction, full_prompt)
 
     @discord.app_commands.command(name="ask", description="Frage Thorsten etwas.")
     async def askai(self, interaction: discord.Interaction, prompt: str):
@@ -176,13 +178,14 @@ class AiCog(commands.Cog):
 
         channel = interaction.user.voice.channel
 
-        # Baue Kontext für KI
-        context_str = await build_ai_context(channel)
-        full_prompt = f"Kontext: {context_str}\n\n Prompt: {prompt}"
-        await self.save_message(interaction.user, prompt)
+        async with self.ai_lock:
+            # Baue Kontext für KI
+            context_str = await build_ai_context(channel)
+            full_prompt = f"Kontext: {context_str}\n\n Prompt: {prompt}"
+            await self.save_message(interaction.user, prompt)
 
-        # Frage KI-Model
-        resp = await ask_ollama(interaction, full_prompt)
+            # Frage KI-Model
+            resp = await ask_ollama(interaction, full_prompt)
 
         if type(resp) == str:
             print(resp)

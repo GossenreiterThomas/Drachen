@@ -7,7 +7,7 @@ spec:
     - ReadWriteOnce
   resources:
     requests:
-      storage: 15Gi
+      storage: 20Gi
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -38,16 +38,19 @@ spec:
             - containerPort: 11434
           resources:
             requests:
-              memory: "8Gi"
+              memory: "12Gi"
               cpu: "4"
             limits:
-              memory: "20Gi"
+              memory: "16Gi"
               cpu: "8"
+          env:
+            - name: CUDA_VISIBLE_DEVICES
+              value: "0"  # Use GPU 0 if available
           readinessProbe:
             httpGet:
               path: /api/tags
               port: 11434
-            initialDelaySeconds: 120   # wait 2 minutes before first probe
+            initialDelaySeconds: 120
             periodSeconds: 10
             failureThreshold: 6
 
@@ -70,9 +73,20 @@ metadata:
 
     # For Traefik (uncomment if using Traefik):
     # traefik.ingress.kubernetes.io/router.middlewares: default-strip-prefix@kubernetescrd
+    nginx.ingress.kubernetes.io/rewrite-target: /$1
 spec:
   ingressClassName: nginx  # Change to your ingress class (nginx, traefik, etc.)
   rules:
+    - host: it210195.cloud.htl-leonding.ac.at
+      http:
+        paths:
+          - path: /ollama/?(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: thorsten-ollama-service
+                port:
+                  number: 11434
     - host: it210195.cloud.htl-leonding.ac.at
       http:
         paths:
