@@ -45,19 +45,18 @@ async def build_ai_context(channel: discord.VoiceChannel) -> str:
 async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
     """Sendet eine Anfrage an das lokale Ollama-Model und gibt die Antwort zurück."""
     import ollama
+    from ollama import ResponseError
 
     try:
         print("Ai wird gefragt:")
         # Initialisiere den Ollama-Client
-        # client = ollama.AsyncClient(host="https://it210195.cloud.htl-leonding.ac.at")
-        client = ollama.AsyncClient(host="https://it210195.cloud.htl-leonding.ac.at/ollama")
+        client = ollama.AsyncClient(host="http://127.0.0.1:11434/")
 
         # Erstelle die vollständige Prompt-Nachricht
         full_prompt = f"Kontext: {prompt}\n"
         if conversation_history:
             full_prompt += "\nGesprächsverlauf:\n"
             for msg in conversation_history[-max_history:]:
-                # Füge Discord-Namen statt 'Benutzer' oder 'Thorsten' hinzu
                 user_name = msg.get("user_name", "Thorsten")
                 full_prompt += f"{user_name}: {msg['content']}\n"
 
@@ -65,14 +64,21 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
         buffer = ""
         sentence = ""
 
-        stream = await client.generate(
-            model=OLLAMA_MODEL, prompt=full_prompt, stream=True
-        )
+        try:
+            stream = await client.generate(
+                model=OLLAMA_MODEL, prompt=full_prompt, stream=True
+            )
+        except ResponseError as e:
+            if e.status_code == 404:
+                return f"Fehler: Das Modell '{OLLAMA_MODEL}' wurde nicht gefunden. Bitte stelle sicher, dass es in Ollama installiert ist."
+            logging.error(f"Ollama ResponseError: {e}")
+            return f"Ollama Fehler ({e.status_code}): {e.error}"
+        except Exception as e:
+            logging.error(f"Fehler bei der Verbindung zu Ollama: {e}")
+            return "Ich konnte keine Verbindung zu Ollama herstellen. Ist der Dienst gestartet?"
 
         if interaction.user.voice is not None: ##if user is in a voice channel
             channel = interaction.user.voice.channel
-            #vc = await channel.connect()# in brain
-            #print(type(vc))
 
         async for chunk in stream:
             try:
@@ -89,18 +95,13 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
                     ##Text Channel
                     await interaction.followup.send(sentence, ephemeral=True)
 
-                    ##Voice Channel
-                    #if interaction.user.voice is not None:  ##if user is in a voice channel
-                    #    await add_sentence_to_queue(sentence, interaction)
-                    #    await ai_response_queue_tts(vc)
-
                     ##Brain(WIP)
                     brain.add_text_to_queue(sentence, interaction)
 
                     sentence = ""
                     buffer += text
             except Exception as e:
-                print(f"Error: {e}")
+                print(f"Error during chunk processing: {e}")
                 continue
         full_response = buffer
         print("full res:", full_response)
@@ -114,7 +115,7 @@ async def ask_ollama(interaction, prompt: str, max_history: int = 50) -> str:
             return full_response
 
     except Exception as e:
-        logging.exception(e)
+        logging.exception(f"Unerwarteter Fehler in ask_ollama: {e}")
         return "Verdammt nochmal, jetzt funktioniert's wieder nicht! Gib mir mal 'ne Minute Zeit..."
 
 async def add_sentence_to_queue(sentence: str, interaction):

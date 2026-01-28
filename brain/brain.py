@@ -41,7 +41,7 @@ async def think_loop():
                 await talk(queue[0].interaction.user.voice.channel)  # also pops the phrase#
             else:
                 ##nothing to say
-                print("waiting_till_leave:",waiting_till_leave)
+                #print("waiting_till_leave:",waiting_till_leave)
                 if current_channel is not None:
                     if not current_channel.is_playing():
                         waiting_till_leave += 1
